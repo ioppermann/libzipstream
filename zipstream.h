@@ -64,7 +64,7 @@ typedef struct {
 
 ZS *zs_init(void);
 int zs_add_file(ZS *zs, const char *path);
-void zs_finalize(void);
+void zs_finalize(ZS *zs);
 int zs_write(ZS *zs, char *buf, size_t size);
 void zs_free(ZS *zs);
 

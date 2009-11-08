@@ -123,6 +123,15 @@ int zs_add_file(ZS *zs, const char *path) {
 	return 0;
 }
 
+void zs_finalize(ZS *zs) {
+	if(zs == NULL)
+		return;
+
+	zs->finalized = 1;
+
+	return;
+}
+
 int zs_write_file(ZSFile *zsf, char *buf, int sbuf) {
 	int i;
 	int bytesread;
