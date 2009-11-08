@@ -17,9 +17,9 @@ int main(int argc, char **argv) {
 
 	zs = zs_init();
 
-	zs_add_file(zs, "foobar.mp4");
-	zs_add_file(zs, "1171032474.mpg");
-	zs_add_file(zs, "asnumber.zip");
+	zs_add_file(zs, "data/foobar.mp4");
+	zs_add_file(zs, "data/1171032474.mpg");
+	zs_add_file(zs, "data/asnumber.zip");
 
 	zs_finalize(zs);
 
