@@ -37,7 +37,7 @@ typedef struct {
 	ZSFile *files;
 } ZSDirectory;
 
-enum stages {NONE = 0, LFH, FNAME, FDATA, LFD, CDH, EOCD};
+enum stages {NONE = 0, LF_HEADER, LF_NAME, LF_DATA, LF_DESCRIPTOR, CD_HEADER, CD_NAME, EOCD, FIN, ERROR};
 
 typedef struct {
 	// Current file
