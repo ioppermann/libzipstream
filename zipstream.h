@@ -4,17 +4,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#define ZS_SIGNATURE_LFH	0x04034b50
-#define ZS_SIGNATURE_LFD	0x08074b50
-#define ZS_SIGNATURE_CDH	0x02014b50
-#define ZS_SIGNATURE_EOCD	0x06054b50
-
-#define ZS_LENGTH_LFH		30
-#define ZS_LENGTH_LFD		16
-#define ZS_LENGTH_CDH		46
-#define ZS_LENGTH_EOCD		22
-
-#define ZS_LENGTH_MAX		ZS_LENGTH_CDH
+#define ZS_STAGE_LENGTH_MAX		46
 
 typedef struct ZSFile {
 	char *fpath;
@@ -50,7 +40,7 @@ typedef struct {
 	stages stage;
 
 	// Stage data
-	char stage_data[ZS_LENGTH_MAX];
+	char stage_data[ZS_STAGE_LENGTH_MAX];
 
 	// Stage position
 	size_t stage_pos;
@@ -65,8 +55,7 @@ typedef struct {
 ZS *zs_init(void);
 int zs_add_file(ZS *zs, const char *path);
 void zs_finalize(ZS *zs);
-int zs_write(ZS *zs, char *buf, size_t sbuf);
+int zs_write(ZS *zs, char *buf, int sbuf);
 void zs_free(ZS *zs);
 
 #endif
-
