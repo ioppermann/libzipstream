@@ -69,6 +69,7 @@ void zs_free(ZS *zs) {
 }
 
 int zs_add_file(ZS *zs, const char *path) {
+	char *fname;
 	ZSFile *zsf, *pzsf;
 	struct stat sb;
 
@@ -95,7 +96,15 @@ int zs_add_file(ZS *zs, const char *path) {
 		return -1;
 	}
 
-	zsf->fname = basename(zsf->fpath);
+	fname = basename(zsf->fpath);
+	if(fname == NULL) {
+		free(zsf->fpath);
+		free(zsf);
+
+		return -1;
+	}
+
+	zsf->fname = strdup(fname);
 	if(zsf->fname == NULL) {
 		free(zsf->fpath);
 		free(zsf);
@@ -111,9 +120,8 @@ int zs_add_file(ZS *zs, const char *path) {
 	if(zs->zsd.nfiles != 0) {
 		pzsf = zs->zsd.files;
 
-		while(pzsf->next != NULL) {
+		while(pzsf->next != NULL)
 			pzsf = pzsf->next;
-		}
 
 		pzsf->next = zsf;
 		zsf->prev = pzsf;
