@@ -109,8 +109,6 @@ int zs_add_file(ZS *zs, const char *path) {
 	zsf->ftime = sb.st_mtime;
 	zsf->fsize = sb.st_size;
 
-	zsf->crc32 = crc_start();
-
 	if(zs->zsd.nfiles != 0) {
 		pzsf = zs->zsd.files;
 
@@ -137,8 +135,8 @@ void zs_finalize(ZS *zs) {
 	return;
 }
 
-int zs_write(ZS *zs, char *buf, size_t sbuf) {
-	int i, bytesread, bufpos;
+int zs_write(ZS *zs, char *buf, int sbuf) {
+	int bytes;
 
 	if(zs == NULL)
 		return -1;
@@ -147,6 +145,94 @@ int zs_write(ZS *zs, char *buf, size_t sbuf) {
 		return -1;
 
 	zs_stager(zs);
+
+	if(zs->stage == ERROR)
+		return -1;
+
+	if(zs->stage == FIN)
+		return 0;
+
+	switch(zs->stage) {
+		case LF_HEADER:
+			bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_LFH);
+			break;
+		case LF_DESCRIPTOR:
+			bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_LFD);
+			break;
+		case CD_HEADER:
+			bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_CDH);
+			break;
+		case EOCD:
+			bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_EOCD);
+			break;
+		case LF_NAME:
+		case CD_NAME:
+			bytes = zs_write_filename(zs, buf, sbuf);
+			break;
+		case LF_DATA:
+			bytes = zs_write_filedata(zs, buf, sbuf);
+			break;
+		default:
+			return -1;
+	}
+
+	return bytes;
+}
+
+int zs_write_stagedata(ZS *zs, char *buf, int sbuf, int size) {
+	int i;
+	int bytes, bytesread;
+
+	bytes = 0;
+
+	bytesread = size - zs->stage_pos;
+	if(sbuf < bytesread)
+		bytesread = sbuf;
+
+	for(i = 0; i < bytesread; i++) {
+		buf[bytes] = zs->stage_data[i + zs->stage_pos];
+
+		bytes++;
+	}
+
+	zs->stage_pos += bytesread;
+
+	return bytes;
+}
+
+int zs_write_filename(ZS *zs, char *buf, int sbuf) {
+	int i;
+	int bytes, bytesread;
+
+	bytes = 0;
+
+	bytesread = zs->zsf->lfname - zs->stage_pos;
+	if(sbuf < bytesread)
+		bytesread = sbuf;
+
+	for(i = 0; i < bytesread; i++) {
+		buf[bytes] = zs->zsf->fname[i + zs->stage_pos];
+
+		bytes++;
+	}
+
+	zs->stage_pos += bytesread;
+
+	return bytes;
+}
+
+int zs_write_filedata(ZS *zs, char *buf, int sbuf) {
+	int bytesread;
+
+	bytesread = fread(buf, 1, sbuf, zs->fp);
+	zs->stage_pos += bytesread;
+
+	zs->zsf->crc32 = crc_partial(zs->zsf->crc32, buf, bytesread);
+
+	if(bytesread < sbuf)	// EOF
+		zs->zsf->fsize = zsf->stage_pos;
+
+	return bytesread;
 }
 
 void zs_stager(ZS *zs) {
@@ -167,7 +253,10 @@ void zs_stager(ZS *zs) {
 			zs->stage_pos = 0;
 		}
 		else {
-			if(zs->stage_pos == ZS_LENGTH_LFH) {
+			if(zs->stage_pos == 0) {
+				zs_build_lfh();
+			}
+			else if(zs->stage_pos == ZS_LENGTH_LFH) {
 				zs->stage = LF_NAME;
 				zs->stage_pos = 0;
 			}
@@ -182,6 +271,8 @@ void zs_stager(ZS *zs) {
 			zs->fp = fopen(zs->zsf->path, "rb");
 			if(zs->fp == NULL)
 				zs->stage = ERROR;
+
+			zs->zsf->crc32 = crc_start();
 		}
 	}
 
@@ -191,11 +282,16 @@ void zs_stager(ZS *zs) {
 			zs->stage_pos = 0;
 
 			fclose(zs->fp);
+
+			zs->zsf->crc32 = crc_finish(zs->zsf->crc32);
 		}
 	}
 
 	if(zs->stage == LF_DESCRIPTOR) {
-		if(zs->stage_pos == ZS_LENGTH_LFD) {
+		if(zs->stage_pos == 0) {
+			zs_build_lfd();
+		}
+		else if(zs->stage_pos == ZS_LENGTH_LFD) {
 			zs->zsf = zs->zsf->next;
 
 			zs->stage = LF_HEADER;
@@ -209,7 +305,10 @@ void zs_stager(ZS *zs) {
 			zs->stage_pos = 0;
 		}
 		else {
-			if(zs->stage_pos == ZS_LENGTH_CDH) {
+			if(zs->stage_pos == 0) {
+				zs_build_cdh();
+			}
+			else if(zs->stage_pos == ZS_LENGTH_CDH) {
 				zs->stage = CD_NAME;
 				zs->stage_pos = 0;
 			}
@@ -226,7 +325,10 @@ void zs_stager(ZS *zs) {
 	}
 
 	if(zs->stage == EOCD) {
-		if(zs->stage_pos == ZS_LENGTH_EOCD) {
+		if(zs->stage_pos == 0) {
+			zs_build_eocd();
+		}
+		else if(zs->stage_pos == ZS_LENGTH_EOCD) {
 			zs->stage = FIN;
 			zs->stage_pos = 0;
 		}
@@ -238,357 +340,268 @@ void zs_stager(ZS *zs) {
 	return;
 }
 
-int zs_write_file(ZSFile *zsf, char *buf, int sbuf) {
-	int i;
-	int bytesread;
-	int bufpos;
-
-	if(zsf == NULL)
-		return -1;
-
-	bufpos = 0;
-
-	// Local File Header
-	if(zsf->c_lfheader != sizeof(zsf->lfheader)) {
-		bytesread = sizeof(zsf->lfheader) - zsf->c_lfheader;
-		if(sbuf < bytesread)
-			bytesread = sbuf;
-
-		for(i = 0; i < bytesread; i++) {
-			buf[bufpos] = zsf->lfheader[i + zsf->c_lfheader];
-
-			bufpos++;
-		}
-
-		zsf->c_lfheader += bytesread;
-
-		return bufpos;
-	}
-
-	// Filename
-	if(zsf->c_name != zsf->lfname) {
-		bytesread = zsf->lfname - zsf->c_name;
-		if(sbuf < bytesread)
-			bytesread = sbuf;
-
-		for(i = 0; i < bytesread; i++) {
-			buf[bufpos] = zsf->fname[i + zsf->c_name];
-
-			bufpos++;
-		}
-
-		zsf->c_name += bytesread;
-
-		return bufpos;
-	}
-
-	// Uncompressed file data
-	if(zsf->fsize == 0) {
-		if(zsf->c_data == 0) {
-			zsf->fp = fopen(zsf->path, "rb");
-			if(zsf->fp == NULL)
-				return -1;
-		}
-
-		bytesread = fread(buf, 1, sbuf, zsf->fp);
-		zsf->c_data += bytesread;
-
-		zsf->crc32 = crc_partial(zsf->crc32, buf, bytesread);
-
-		if(bytesread < sbuf) {
-			fclose(zsf->fp);
-			zsf->fsize = zsf->c_data;
-
-			zsf->crc32 = crc_finish(zsf->crc32);
-
-			zs_build_descriptor(zsf);
-		}
-
-		return bytesread;
-	}
-
-	// Descriptor
-	if(zsf->c_lfdescriptor != sizeof(zsf->lfdescriptor)) {
-		bytesread = sizeof(zsf->lfdescriptor) - zsf->c_lfdescriptor;;
-		if(sbuf < bytesread)
-			bytesread = sbuf;
-
-		for(i = 0; i < bytesread; i++) {
-			buf[bufpos] = zsf->lfdescriptor[i + zsf->c_lfdescriptor];
-
-			bufpos++;
-		}
-
-		zsf->c_lfdescriptor += bytesread;
-
-		return bufpos;
-	}
-
-	return -1;
-}
-
-void zs_build_lfheader(ZSFile *zsf) {
+void zs_build_lfh(ZS *zs) {
 	struct tm *ltime;
 	int tmp;
 
-	if(zsf == NULL)
+	if(zs == NULL)
 		return;
 
 	// Signature
-	zsf->lfheader[ 0] = 0x50;
-	zsf->lfheader[ 1] = 0x4b;
-	zsf->lfheader[ 2] = 0x03;
-	zsf->lfheader[ 3] = 0x04;
+	zs->stage_data[ 0] = ((ZS_SIGNATURE_LFH >>  0) && 0xFF);
+	zs->stage_data[ 1] = ((ZS_SIGNATURE_LFH >>  8) && 0xFF);
+	zs->stage_data[ 2] = ((ZS_SIGNATURE_LFH >> 16) && 0xFF);
+	zs->stage_data[ 3] = ((ZS_SIGNATURE_LFH >> 24) && 0xFF);
 
 	// Version
-	zsf->lfheader[ 4] = 0x0A;
-	zsf->lfheader[ 5] = 0x00;
+	zs->stage_data[ 4] = 0x0A;
+	zs->stage_data[ 5] = 0x00;
 
 	// General Purpose
-	zsf->lfheader[ 6] = 0x08;
-	zsf->lfheader[ 7] = 0x00;
+	zs->stage_data[ 6] = 0x08;
+	zs->stage_data[ 7] = 0x00;
 
 	// Compression Method
-	zsf->lfheader[ 8] = 0x00;	// Store
-	zsf->lfheader[ 9] = 0x00;
+	zs->stage_data[ 8] = 0x00;	// Store
+	zs->stage_data[ 9] = 0x00;
 
 	// Modification Time
-	ltime = localtime(&zsf->ftime);
+	ltime = localtime(&zs->zsf->ftime);
 	tmp = 0;
 	tmp |= (ltime->tm_hour << 11);
 	tmp |= (ltime->tm_min << 5);
 	tmp |= (ltime->tm_sec / 2);
-	zsf->lfheader[10] = ((tmp >> 0) & 0xFF);
-	zsf->lfheader[11] = ((tmp >> 8) & 0xFF);
+	zs->stage_data[10] = ((tmp >>  0) & 0xFF);
+	zs->stage_data[11] = ((tmp >>  8) & 0xFF);
 
 	// Modification Date
 	tmp = 0;
 	tmp |= ((ltime->tm_year - 80) << 9);
 	tmp |= ((ltime->tm_mon + 1) << 5);
 	tmp |= ltime->tm_mday;
-	zsf->lfheader[12] = ((tmp >> 0) & 0xFF);
-	zsf->lfheader[13] = ((tmp >> 8) & 0xFF);
+	zs->stage_data[12] = ((tmp >>  0) & 0xFF);
+	zs->stage_data[13] = ((tmp >>  8) & 0xFF);
 
 	// CRC32
-	zsf->lfheader[14] = 0x00;
-	zsf->lfheader[15] = 0x00;
-	zsf->lfheader[16] = 0x00;
-	zsf->lfheader[17] = 0x00;
+	zs->stage_data[14] = 0x00;
+	zs->stage_data[15] = 0x00;
+	zs->stage_data[16] = 0x00;
+	zs->stage_data[17] = 0x00;
 
 	// Compressed Size
-	zsf->lfheader[18] = 0x00;
-	zsf->lfheader[19] = 0x00;
-	zsf->lfheader[20] = 0x00;
-	zsf->lfheader[21] = 0x00;
+	zs->stage_data[18] = 0x00;
+	zs->stage_data[19] = 0x00;
+	zs->stage_data[20] = 0x00;
+	zs->stage_data[21] = 0x00;
 
 	// Uncompressed Size
-	zsf->lfheader[22] = 0x00;
-	zsf->lfheader[23] = 0x00;
-	zsf->lfheader[24] = 0x00;
-	zsf->lfheader[25] = 0x00;
+	zs->stage_data[22] = 0x00;
+	zs->stage_data[23] = 0x00;
+	zs->stage_data[24] = 0x00;
+	zs->stage_data[25] = 0x00;
 
 	// Filename Length
-	zsf->lfheader[26] = ((zsf->lfname >> 0) & 0xFF);
-	zsf->lfheader[27] = ((zsf->lfname >> 8) & 0xFF);
+	zs->stage_data[26] = ((zs->zsf->lfname >>  0) & 0xFF);
+	zs->stage_data[27] = ((zs->zsf->lfname >>  8) & 0xFF);
 
 	// Extra Field Length
-	zsf->lfheader[28] = 0x00;
-	zsf->lfheader[29] = 0x00;
+	zs->stage_data[28] = 0x00;
+	zs->stage_data[29] = 0x00;
 
 	return;
 }
 
-void zs_build_descriptor(ZSFile *zsf) {
-	if(zsf == NULL)
+void zs_build_lfd(ZS *zs) {
+	if(zs == NULL)
 		return;
 
 	// Signature
-	zsf->lfdescriptor[ 0] = 0x50;
-	zsf->lfdescriptor[ 1] = 0x4b;
-	zsf->lfdescriptor[ 2] = 0x07;
-	zsf->lfdescriptor[ 3] = 0x08;
+	zs->stage_data[ 0] = ((ZS_SIGNATURE_LFD >>  0) && 0xFF);
+	zs->stage_data[ 1] = ((ZS_SIGNATURE_LFD >>  8) && 0xFF);
+	zs->stage_data[ 2] = ((ZS_SIGNATURE_LFD >> 16) && 0xFF);
+	zs->stage_data[ 3] = ((ZS_SIGNATURE_LFD >> 24) && 0xFF);
 
 	// CRC32
-	zsf->lfdescriptor[ 4] = ((zsf->crc32 >>  0) & 0xFF);
-	zsf->lfdescriptor[ 5] = ((zsf->crc32 >>  8) & 0xFF);
-	zsf->lfdescriptor[ 6] = ((zsf->crc32 >> 16) & 0xFF);
-	zsf->lfdescriptor[ 7] = ((zsf->crc32 >> 24) & 0xFF);
+	zs->stage_data[ 4] = ((zs->zsf->crc32 >>  0) & 0xFF);
+	zs->stage_data[ 5] = ((zs->zsf->crc32 >>  8) & 0xFF);
+	zs->stage_data[ 6] = ((zs->zsf->crc32 >> 16) & 0xFF);
+	zs->stage_data[ 7] = ((zs->zsf->crc32 >> 24) & 0xFF);
 
 	// Compressed Size
-	zsf->lfdescriptor[ 8] = ((zsf->fsize >>  0) & 0xFF);
-	zsf->lfdescriptor[ 9] = ((zsf->fsize >>  8) & 0xFF);
-	zsf->lfdescriptor[10] = ((zsf->fsize >> 16) & 0xFF);
-	zsf->lfdescriptor[11] = ((zsf->fsize >> 24) & 0xFF);
+	zs->stage_data[ 8] = ((zs->zsf->fsize >>  0) & 0xFF);
+	zs->stage_data[ 9] = ((zs->zsf->fsize >>  8) & 0xFF);
+	zs->stage_data[10] = ((zs->zsf->fsize >> 16) & 0xFF);
+	zs->stage_data[11] = ((zs->zsf->fsize >> 24) & 0xFF);
 
 	// Uncompressed Size
-	zsf->lfdescriptor[12] = zsf->lfdescriptor[ 8];
-	zsf->lfdescriptor[13] = zsf->lfdescriptor[ 9];
-	zsf->lfdescriptor[14] = zsf->lfdescriptor[10];
-	zsf->lfdescriptor[15] = zsf->lfdescriptor[11];
+	zs->stage_data[12] = zs->stage_data[ 8];
+	zs->stage_data[13] = zs->stage_data[ 9];
+	zs->stage_data[14] = zs->stage_data[10];
+	zs->stage_data[15] = zs->stage_data[11];
 
 	return;
 }
 
-void zs_build_cdheader(ZSFile *zsf) {
+void zs_build_cdh(ZS *zs) {
 	struct tm *ltime;
 	int tmp;
 
-	if(zsf == NULL)
+	if(zs == NULL)
 		return;
 
 	// Signature
-	zsf->cdheader[ 0] = 0x50;
-	zsf->cdheader[ 1] = 0x4b;
-	zsf->cdheader[ 2] = 0x01;
-	zsf->cdheader[ 3] = 0x02;
+	zs->stage_data[ 0] = ((ZS_SIGNATURE_CDH >>  0) && 0xFF);
+	zs->stage_data[ 1] = ((ZS_SIGNATURE_CDH >>  8) && 0xFF);
+	zs->stage_data[ 2] = ((ZS_SIGNATURE_CDH >> 16) && 0xFF);
+	zs->stage_data[ 3] = ((ZS_SIGNATURE_CDH >> 24) && 0xFF);
 
 	// Version Made By
-	zsf->cdheader[ 4] = 0x14;
-	zsf->cdheader[ 5] = 0x00;
+	zs->stage_data[ 4] = 0x14;
+	zs->stage_data[ 5] = 0x00;
 
 	// Version To Extract
-	zsf->cdheader[ 6] = 0x0A;
-	zsf->cdheader[ 7] = 0x00;
+	zs->stage_data[ 6] = 0x0A;
+	zs->stage_data[ 7] = 0x00;
 
 	// General Purpose
-	zsf->cdheader[ 8] = 0x08;
-	zsf->cdheader[ 9] = 0x00;
+	zs->stage_data[ 8] = 0x08;
+	zs->stage_data[ 9] = 0x00;
 
 	// Compression Method
-	zsf->cdheader[10] = 0x00;
-	zsf->cdheader[11] = 0x00;
+	zs->stage_data[10] = 0x00;
+	zs->stage_data[11] = 0x00;
 
 	// Modification Time
-	ltime = localtime(&zsf->ftime);
+	ltime = localtime(&zs->zsf->ftime);
 	tmp = 0;
 	tmp |= (ltime->tm_hour << 11);
 	tmp |= (ltime->tm_min << 5);
 	tmp |= (ltime->tm_sec / 2);
-	zsf->cdheader[12] = ((tmp >> 0) & 0xFF);
-	zsf->cdheader[13] = ((tmp >> 8) & 0xFF);
+	zs->stage_data[12] = ((tmp >>  0) & 0xFF);
+	zs->stage_data[13] = ((tmp >>  8) & 0xFF);
 
 	// Modification Date
 	tmp = 0;
 	tmp |= ((ltime->tm_year - 80) << 9);
 	tmp |= ((ltime->tm_mon + 1) << 5);
 	tmp |= ltime->tm_mday;
-	zsf->cdheader[14] = ((tmp >> 0) & 0xFF);
-	zsf->cdheader[15] = ((tmp >> 8) & 0xFF);
+	zs->stage_data[14] = ((tmp >>  0) & 0xFF);
+	zs->stage_data[15] = ((tmp >>  8) & 0xFF);
 
 	// CRC32
-	zsf->cdheader[16] = ((zsf->crc32 >>  0) & 0xFF);
-	zsf->cdheader[17] = ((zsf->crc32 >>  8) & 0xFF);
-	zsf->cdheader[18] = ((zsf->crc32 >> 16) & 0xFF);
-	zsf->cdheader[19] = ((zsf->crc32 >> 24) & 0xFF);
+	zs->stage_data[16] = ((zs->zsf->crc32 >>  0) & 0xFF);
+	zs->stage_data[17] = ((zs->zsf->crc32 >>  8) & 0xFF);
+	zs->stage_data[18] = ((zs->zsf->crc32 >> 16) & 0xFF);
+	zs->stage_data[19] = ((zs->zsf->crc32 >> 24) & 0xFF);
 
 	// Compressed Size
-	zsf->cdheader[20] = ((zsf->fsize >>  0) & 0xFF);
-	zsf->cdheader[21] = ((zsf->fsize >>  8) & 0xFF);
-	zsf->cdheader[22] = ((zsf->fsize >> 16) & 0xFF);
-	zsf->cdheader[23] = ((zsf->fsize >> 24) & 0xFF);
+	zs->stage_data[20] = ((zs->zsf->fsize >>  0) & 0xFF);
+	zs->stage_data[21] = ((zs->zsf->fsize >>  8) & 0xFF);
+	zs->stage_data[22] = ((zs->zsf->fsize >> 16) & 0xFF);
+	zs->stage_data[23] = ((zs->zsf->fsize >> 24) & 0xFF);
 
 	// Uncompressed Size
-	zsf->cdheader[24] = zsf->cdheader[20];
-	zsf->cdheader[25] = zsf->cdheader[21];
-	zsf->cdheader[26] = zsf->cdheader[22];
-	zsf->cdheader[27] = zsf->cdheader[23];
+	zs->stage_data[24] = zs->stage_data[20];
+	zs->stage_data[25] = zs->stage_data[21];
+	zs->stage_data[26] = zs->stage_data[22];
+	zs->stage_data[27] = zs->stage_data[23];
 
 	// Filename Length
-	zsf->cdheader[28] = ((zsf->lfname >> 0) & 0xFF);
-	zsf->cdheader[29] = ((zsf->lfname >> 8) & 0xFF);
+	zs->stage_data[28] = ((zs->zsf->lfname >>  0) & 0xFF);
+	zs->stage_data[29] = ((zs->zsf->lfname >>  8) & 0xFF);
 
 	// Extra Field Length
-	zsf->cdheader[30] = 0x00;
-	zsf->cdheader[31] = 0x00;
+	zs->stage_data[30] = 0x00;
+	zs->stage_data[31] = 0x00;
 
 	// File Comment Length
-	zsf->cdheader[32] = 0x00;
-	zsf->cdheader[33] = 0x00;
+	zs->stage_data[32] = 0x00;
+	zs->stage_data[33] = 0x00;
 
 	// Disk Number Start
-	zsf->cdheader[34] = 0x00;
-	zsf->cdheader[35] = 0x00;
+	zs->stage_data[34] = 0x00;
+	zs->stage_data[35] = 0x00;
 
 	// Internal File Attributes
-	zsf->cdheader[36] = 0x00;
-	zsf->cdheader[37] = 0x00;
+	zs->stage_data[36] = 0x00;
+	zs->stage_data[37] = 0x00;
 
 	// External File Attributes
-	zsf->cdheader[38] = 0x00;
-	zsf->cdheader[39] = 0x00;
-	zsf->cdheader[40] = 0x00;
-	zsf->cdheader[41] = 0x00;
+	zs->stage_data[38] = 0x00;
+	zs->stage_data[39] = 0x00;
+	zs->stage_data[40] = 0x00;
+	zs->stage_data[41] = 0x00;
 
 	// Relative Offset Of LH
-	zsf->cdheader[42] = ((zsf->offset >>  0) & 0xFF);
-	zsf->cdheader[43] = ((zsf->offset >>  8) & 0xFF);
-	zsf->cdheader[44] = ((zsf->offset >> 16) & 0xFF);
-	zsf->cdheader[45] = ((zsf->offset >> 24) & 0xFF);
+	zs->stage_data[42] = ((zs->zsf->offset >>  0) & 0xFF);
+	zs->stage_data[43] = ((zs->zsf->offset >>  8) & 0xFF);
+	zs->stage_data[44] = ((zs->zsf->offset >> 16) & 0xFF);
+	zs->stage_data[45] = ((zs->zsf->offset >> 24) & 0xFF);
 
 	return;
 }
 
-void zs_build_eocd(ZSDirectory *zs) {
+void zs_build_eocd(ZS *zs) {
 	size_t size, offset;
 
 	if(zs == NULL)
 		return;
 
 	// Signature
-	zs->eocd[ 0] = 0x50;
-	zs->eocd[ 1] = 0x4b;
-	zs->eocd[ 2] = 0x05;
-	zs->eocd[ 3] = 0x06;
+	zs->stage_data[ 0] = ((ZS_SIGNATURE_EOCD >>  0) && 0xFF);
+	zs->stage_data[ 1] = ((ZS_SIGNATURE_EOCD >>  8) && 0xFF);
+	zs->stage_data[ 2] = ((ZS_SIGNATURE_EOCD >> 16) && 0xFF);
+	zs->stage_data[ 3] = ((ZS_SIGNATURE_EOCD >> 24) && 0xFF);
 
 	// Number Of This Disk
-	zs->eocd[ 4] = 0x00;
-	zs->eocd[ 5] = 0x00;
+	zs->stage_data[ 4] = 0x00;
+	zs->stage_data[ 5] = 0x00;
 
 	// #Disc With CD
-	zs->eocd[ 6] = 0x00;
-	zs->eocd[ 7] = 0x00;
+	zs->stage_data[ 6] = 0x00;
+	zs->stage_data[ 7] = 0x00;
 
 	// #Entries Of This Disk
-	zs->eocd[ 8] = ((zs->nfiles >> 0) & 0xFF);
-	zs->eocd[ 9] = ((zs->nfiles >> 8) & 0xFF);
+	zs->stage_data[ 8] = ((zs->zsd.nfiles >>  0) & 0xFF);
+	zs->stage_data[ 9] = ((zs->zsd.nfiles >>  8) & 0xFF);
 
 	// #Entries
-	zs->eocd[10] = zs->eocd[ 8];
-	zs->eocd[11] = zs->eocd[ 9];
+	zs->stage_data[10] = zs->stage_data[ 8];
+	zs->stage_data[11] = zs->stage_data[ 9];
 
 	// Size Of The CD
 	size = zs_get_cdsize(zs);
-	zs->eocd[12] = ((size >>  0) & 0xFF);
-	zs->eocd[13] = ((size >>  8) & 0xFF);
-	zs->eocd[14] = ((size >> 16) & 0xFF);
-	zs->eocd[15] = ((size >> 24) & 0xFF);
+	zs->stage_data[12] = ((size >>  0) & 0xFF);
+	zs->stage_data[13] = ((size >>  8) & 0xFF);
+	zs->stage_data[14] = ((size >> 16) & 0xFF);
+	zs->stage_data[15] = ((size >> 24) & 0xFF);
 
 	// Offset Of The CD
 	offset = zs_get_cdoffset(zs);
-	zs->eocd[16] = ((offset >>  0) & 0xFF);
-	zs->eocd[17] = ((offset >>  8) & 0xFF);
-	zs->eocd[18] = ((offset >> 16) & 0xFF);
-	zs->eocd[19] = ((offset >> 24) & 0xFF);
+	zs->stage_data[16] = ((offset >>  0) & 0xFF);
+	zs->stage_data[17] = ((offset >>  8) & 0xFF);
+	zs->stage_data[18] = ((offset >> 16) & 0xFF);
+	zs->stage_data[19] = ((offset >> 24) & 0xFF);
 
 	// ZIP File Comment Length
-	zs->eocd[20] = 0x00;
-	zs->eocd[21] = 0x00;
+	zs->stage_data[20] = 0x00;
+	zs->stage_data[21] = 0x00;
 
 	return;
 }
 
-size_t zs_get_cdsize(ZSDirectory *zs) {
+size_t zs_get_cdsize(ZS *zs) {
 	int size = 0;
 	ZSFile *zsf;
 
 	if(zs == NULL)
 		return 0;
 
-	zsf = zs->files;
+	zsf = zs->zsd.files;
 
 	while(zsf != NULL) {
+		size += ZS_LENGTH_CDH;
 		size += zsf->lfname;
-		size += sizeof(zsf->cdheader);
 
 		zsf = zsf->next;
 	}
@@ -596,20 +609,20 @@ size_t zs_get_cdsize(ZSDirectory *zs) {
 	return size;
 }
 
-size_t zs_get_cdoffset(ZSDirectory *zs) {
+size_t zs_get_cdoffset(ZS *zs) {
 	size_t offset = 0;
 	ZSFile *zsf;
 
 	if(zs == NULL)
 		return 0;
 
-	zsf = zs->files;
+	zsf = zs->zsd.files;
 
 	while(zsf != NULL) {
-		offset += sizeof(zsf->lfheader);
+		offset += ZS_LENGTH_LFH;
 		offset += zsf->lfname;
 		offset += zsf->fsize;
-		offset += sizeof(zsf->lfdescriptor);
+		offset += ZS_LENGTH_LFD;
 
 		zsf = zsf->next;
 	}
@@ -629,10 +642,10 @@ void zs_build_offsets(ZSDirectory *zs) {
 	while(zsf != NULL) {
 		zsf->offset = offset;
 
-		offset += sizeof(zsf->lfheader);
+		offset += ZS_LENGTH_LFH;
 		offset += zsf->lfname;
 		offset += zsf->fsize;
-		offset += sizeof(zsf->lfdescriptor);
+		offset += ZS_LENGTH_LFD;
 
 		zs_build_cdheader(zsf);
 
@@ -641,84 +654,3 @@ void zs_build_offsets(ZSDirectory *zs) {
 
 	return;
 }
-
-int zs_write_directory(ZSDirectory *zs, char *buf, int sbuf) {
-	int bytesread;
-	int bufpos;
-	int nfiles;
-	int i;
-	ZSFile *zsf;
-
-	zs_build_offsets(zs);
-	zs_build_eocd(zs);
-
-	bufpos = 0;
-
-	// Local File Headers
-	if(zs->c_nfiles != zs->nfiles) {
-		nfiles = 0;
-		zsf = zs->files;
-
-		while(nfiles != zs->c_nfiles) {
-			zsf = zsf->next;
-			nfiles++;
-		}
-
-		if(zsf->c_cdheader != sizeof(zsf->cdheader)) {
-			zsf->c_name = 0;
-			bytesread = sizeof(zsf->cdheader) - zsf->c_cdheader;
-			if(sbuf < bytesread)
-				bytesread = sbuf;
-
-			for(i = 0; i < bytesread; i++) {
-				buf[bufpos] = zsf->cdheader[i + zsf->c_cdheader];
-
-				bufpos++;
-			}
-
-			zsf->c_cdheader += bytesread;
-
-			return bufpos;
-		}
-
-		// Filename
-		if(zsf->c_name != zsf->lfname) {
-			bytesread = zsf->lfname - zsf->c_name;
-			if(sbuf < bytesread)
-				bytesread = sbuf;
-
-			for(i = 0; i < bytesread; i++) {
-				buf[bufpos] = zsf->fname[i + zsf->c_name];
-
-				bufpos++;
-			}
-
-			zsf->c_name += bytesread;
-
-			if(zsf->c_name == zsf->lfname)
-				zs->c_nfiles++;
-
-			return bufpos;
-		}
-	}
-
-	// End Of Central Directory
-	if(zs->c_eocd != sizeof(zs->eocd)) {
-		bytesread = sizeof(zs->eocd) - zs->c_eocd;
-		if(sbuf < bytesread)
-			bytesread = sbuf;
-
-		for(i = 0; i < bytesread; i++) {
-			buf[bufpos] = zs->eocd[i + zs->c_eocd];
-
-			bufpos++;
-		}
-
-		zs->c_eocd += bytesread;
-
-		return bufpos;
-	}
-
-	return -1;
-}
-
