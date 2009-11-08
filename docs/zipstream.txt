@@ -8,6 +8,11 @@ zs_add_file(zs, "foo.txt");
 zs_add_file(zs, "bar.txt");
 zs_add_file(zs, "baz.doc");
 
+/* later
+zs_add_directory(zs, "foobar");
+zs_add_file(zs, "foobar/biz.txt");
+*/
+
 zs_finalize();
 
 while((bytes = zs_write(zs, buf, sizeof(buf)) > 0)
