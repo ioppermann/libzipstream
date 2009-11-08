@@ -13,7 +13,7 @@ zs_add_directory(zs, "foobar");
 zs_add_file(zs, "foobar/biz.txt");
 */
 
-zs_finalize();
+zs_finalize(zs);
 
 while((bytes = zs_write(zs, buf, sizeof(buf)) > 0)
 	fwrite(buf, 1, bytes, stdout);
