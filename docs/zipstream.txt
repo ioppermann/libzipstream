@@ -1,0 +1,17 @@
+#include "zipstream.h"
+
+ZS *zs;
+
+zs = zs_init();
+
+zs_add_file(zs, "foo.txt");
+zs_add_file(zs, "bar.txt");
+zs_add_file(zs, "baz.doc");
+
+zs_finalize();
+
+while((bytes = zs_write(zs, buf, sizeof(buf)) > 0)
+	fwrite(buf, 1, bytes, stdout);
+
+zs_free(zs);
+
