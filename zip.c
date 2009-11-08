@@ -43,16 +43,16 @@ ZS *zs_init(void) {
 	return zs;
 }
 
-void zs_free(ZSDirectory *zs) {
+void zs_free(ZS *zs) {
 	ZSFile *zsf, *pzsf;
 
 	if(zs == NULL)
 		return;
 
-	zsf = zs->files;
+	zsf = zs->zsd.files;
 
 	while(zsf != NULL) {
-		free(zsf->path);
+		free(zsf->fpath);
 		free(zsf->fname);
 
 		pzsf = zsf;
