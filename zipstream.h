@@ -52,8 +52,8 @@ typedef struct {
 	// Stage data
 	char stage_data[ZS_LENGTH_MAX];
 
-	// Stage counter
-	size_t stage_counter;
+	// Stage position
+	size_t stage_pos;
 
 	// Finalized
 	int finalized;
@@ -65,7 +65,7 @@ typedef struct {
 ZS *zs_init(void);
 int zs_add_file(ZS *zs, const char *path);
 void zs_finalize(ZS *zs);
-int zs_write(ZS *zs, char *buf, size_t size);
+int zs_write(ZS *zs, char *buf, size_t sbuf);
 void zs_free(ZS *zs);
 
 #endif
