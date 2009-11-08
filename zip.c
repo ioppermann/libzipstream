@@ -245,7 +245,6 @@ int zs_write_filedata(ZS *zs, char *buf, int sbuf) {
 
 void zs_stager(ZS *zs) {
 	if(zs->stage == NONE) {
-		// select first file
 		zs->zsf = zs->zsd.files;
 
 		zs->stage = LF_HEADER;
@@ -254,7 +253,6 @@ void zs_stager(ZS *zs) {
 
 	if(zs->stage == LF_HEADER) {
 		if(zs->zsf == NULL) {
-			// select first file
 			zs->zsf = zs->zsd.files;
 
 			zs->stage = CD_HEADER;
@@ -310,8 +308,16 @@ void zs_stager(ZS *zs) {
 		else if(zs->stage_pos == ZS_LENGTH_LFD) {
 			zs->zsf = zs->zsf->next;
 
-			zs->stage = LF_HEADER;
-			zs->stage_pos = 0;
+			if(zs->zsf == NULL) {
+				zs->zsf = zs->zsd.files;
+
+				zs->stage = CD_HEADER;
+				zs->stage_pos = 0;
+			}
+			else {
+				zs->stage = LF_HEADER;
+				zs->stage_pos = 0;
+			}
 		}
 	}
 
@@ -335,8 +341,14 @@ void zs_stager(ZS *zs) {
 		if(zs->stage_pos == zs->zsf->lfname) {
 			zs->zsf = zs->zsf->next;
 
-			zs->stage = CD_HEADER;
-			zs->stage_pos = 0;
+			if(zs->zsf == NULL) {
+				zs->stage = EOCD;
+				zs->stage_pos = 0;
+			}
+			else {
+				zs->stage = CD_HEADER;
+				zs->stage_pos = 0;
+			}
 		}
 	}
 
