@@ -33,10 +33,10 @@ int main(int argc, char **argv) {
 	return 0;
 }
 
-ZSDirectory *zs_init(void) {
-	ZSDirectory *zs;
+ZS *zs_init(void) {
+	ZS *zs;
 
-	zs = (ZSDirectory *)calloc(1, sizeof(ZSDirectory));
+	zs = (ZS *)calloc(1, sizeof(ZS));
 
 	crc_init();
 
@@ -66,42 +66,48 @@ void zs_free(ZSDirectory *zs) {
 	return;
 }
 
-ZSFile *zs_add_file(ZSDirectory *zs, const char *path) {
+int zs_add_file(ZS *zs, const char *path) {
 	char *fname;
 	ZSFile *zsf, *pzsf;
 	struct stat sb;
 
 	if(zs == NULL)
-		return NULL;
+		return -1;
 
 	if(stat(path, &sb) == -1)
-		return NULL;
+		return -1;
 
 	if(!S_ISREG(sb.st_mode))
-		return NULL;
-
-	fname = basename(path);
-	if(fname == NULL)
-		return NULL;
+		return -1;
 
 	zsf = (ZSFile *)calloc(1, sizeof(ZSFile));
 	if(zsf == NULL)
-		return NULL;
+		return -1;
 
-	zsf->ftime = time(NULL);
+	zsf->fpath = strdup(path);
+	if(zsf->fpath == NULL) {
+		free(zsf);
 
-	zsf->path = strdup(path);
+		return -1;
+	}
 
-	zsf->fname = strdup(fname);
+	zsf->fname = basename(zsf->fpath);
+	if(zsf->fname == NULL) {
+		free(zsf->fpath);
+		free(zsf);
+
+		return -1;
+	}
+
 	zsf->lfname = strlen(zsf->fname);
-	//zsf->fsize = sb.st_size;
+
+	zsf->ftime = sb.st_mtime;
+	zsf->fsize = sb.st_size;
 
 	zsf->crc32 = crc_start();
 
-	zs_build_lfheader(zsf);
-
-	if(zs->nfiles != 0) {
-		pzsf = zs->files;
+	if(zs->zsd.nfiles != 0) {
+		pzsf = zs->zsd.files;
 
 		while(pzsf->next != NULL) {
 			pzsf = pzsf->next;
@@ -110,11 +116,11 @@ ZSFile *zs_add_file(ZSDirectory *zs, const char *path) {
 		pzsf->next = zsf;
 	}
 	else
-		zs->files = zsf;
+		zs->zsd.files = zsf;
 
-	zs->nfiles++;
+	zs->zsd.nfiles++;
 
-	return zsf;
+	return 0;
 }
 
 int zs_write_file(ZSFile *zsf, char *buf, int sbuf) {
