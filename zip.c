@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 
 	zs_finalize(zs);
 
-	while((bytes = zs_write(zs, buf, sizeof(buf))) > -1) {
+	while((bytes = zs_write(zs, buf, sizeof(buf))) > 0) {
 		fprintf(stderr, "%d\n", bytes);
 		fwrite(buf, 1, bytes, stdout);
 	}
