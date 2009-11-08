@@ -117,6 +117,7 @@ int zs_add_file(ZS *zs, const char *path) {
 		}
 
 		pzsf->next = zsf;
+		zsf->prev = pzsf;
 	}
 	else
 		zs->zsd.files = zsf;
@@ -254,7 +255,7 @@ void zs_stager(ZS *zs) {
 		}
 		else {
 			if(zs->stage_pos == 0) {
-				zs_build_lfh();
+				zs_build_lfh(zs);
 			}
 			else if(zs->stage_pos == ZS_LENGTH_LFH) {
 				zs->stage = LF_NAME;
@@ -284,12 +285,20 @@ void zs_stager(ZS *zs) {
 			fclose(zs->fp);
 
 			zs->zsf->crc32 = crc_finish(zs->zsf->crc32);
+
+			if(zs->zsf->prev != NULL)
+				zs->zsf->offset = zs->zsf->prev->offset;
+
+			zs->zsf->offset += ZS_LENGTH_LFH;
+			zs->zsf->offset += zs->zsf->lfname;
+			zs->zsf->offset += zs->zsf->fsize;
+			zs->zsf->offset += ZS_LENGTH_LFD;
 		}
 	}
 
 	if(zs->stage == LF_DESCRIPTOR) {
 		if(zs->stage_pos == 0) {
-			zs_build_lfd();
+			zs_build_lfd(zs);
 		}
 		else if(zs->stage_pos == ZS_LENGTH_LFD) {
 			zs->zsf = zs->zsf->next;
@@ -306,7 +315,7 @@ void zs_stager(ZS *zs) {
 		}
 		else {
 			if(zs->stage_pos == 0) {
-				zs_build_cdh();
+				zs_build_cdh(zs);
 			}
 			else if(zs->stage_pos == ZS_LENGTH_CDH) {
 				zs->stage = CD_NAME;
@@ -326,7 +335,7 @@ void zs_stager(ZS *zs) {
 
 	if(zs->stage == EOCD) {
 		if(zs->stage_pos == 0) {
-			zs_build_eocd();
+			zs_build_eocd(zs);
 		}
 		else if(zs->stage_pos == ZS_LENGTH_EOCD) {
 			zs->stage = FIN;
@@ -619,38 +628,18 @@ size_t zs_get_cdoffset(ZS *zs) {
 	zsf = zs->zsd.files;
 
 	while(zsf != NULL) {
-		offset += ZS_LENGTH_LFH;
-		offset += zsf->lfname;
-		offset += zsf->fsize;
-		offset += ZS_LENGTH_LFD;
+		if(zsf->next == NULL) {
+			offset = zsf->offset;
+			break;
+		}
 
 		zsf = zsf->next;
 	}
+
+	offset += ZS_LENGTH_LFH;
+	offset += zsf->lfname;
+	offset += zsf->fsize;
+	offset += ZS_LENGTH_LFD;
 
 	return offset;
-}
-
-void zs_build_offsets(ZSDirectory *zs) {
-	size_t offset = 0;
-	ZSFile *zsf;
-
-	if(zs == NULL)
-		return;
-
-	zsf = zs->files;
-
-	while(zsf != NULL) {
-		zsf->offset = offset;
-
-		offset += ZS_LENGTH_LFH;
-		offset += zsf->lfname;
-		offset += zsf->fsize;
-		offset += ZS_LENGTH_LFD;
-
-		zs_build_cdheader(zsf);
-
-		zsf = zsf->next;
-	}
-
-	return;
 }

@@ -18,8 +18,6 @@ void zs_build_lfd(ZSFile *zsf);
 void zs_build_cdh(ZSFile *zsf);
 void zs_build_eocd(ZS *zs);
 
-void zs_build_offsets(ZSDirectory *zs);
-
 int zs_write_stagedata(ZS *zs, char *buf, int sbuf, int size);
 int zs_write_filename(ZS *zs, char *buf, int sbuf);
 int zs_write_filedata(ZS *zs, char *buf, int sbuf);
