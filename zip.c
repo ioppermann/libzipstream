@@ -69,7 +69,6 @@ void zs_free(ZS *zs) {
 }
 
 int zs_add_file(ZS *zs, const char *path) {
-	char *fname;
 	ZSFile *zsf, *pzsf;
 	struct stat sb;
 
@@ -231,7 +230,7 @@ int zs_write_filedata(ZS *zs, char *buf, int sbuf) {
 	zs->zsf->crc32 = crc_partial(zs->zsf->crc32, buf, bytesread);
 
 	if(bytesread < sbuf)	// EOF
-		zs->zsf->fsize = zsf->stage_pos;
+		zs->zsf->fsize = zs->stage_pos;
 
 	return bytesread;
 }
@@ -269,11 +268,11 @@ void zs_stager(ZS *zs) {
 			zs->stage = LF_DATA;
 			zs->stage_pos = 0;
 
-			zs->fp = fopen(zs->zsf->path, "rb");
+			zs->zsf->crc32 = crc_start();
+
+			zs->fp = fopen(zs->zsf->fpath, "rb");
 			if(zs->fp == NULL)
 				zs->stage = ERROR;
-
-			zs->zsf->crc32 = crc_start();
 		}
 	}
 

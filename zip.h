@@ -13,9 +13,9 @@
 #define ZS_LENGTH_CDH		46
 #define ZS_LENGTH_EOCD		22
 
-void zs_build_lfh(ZSFile *zsf);
-void zs_build_lfd(ZSFile *zsf);
-void zs_build_cdh(ZSFile *zsf);
+void zs_build_lfh(ZS *zs);
+void zs_build_lfd(ZS *zs);
+void zs_build_cdh(ZS *zs);
 void zs_build_eocd(ZS *zs);
 
 int zs_write_stagedata(ZS *zs, char *buf, int sbuf, int size);
