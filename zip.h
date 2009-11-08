@@ -3,11 +3,6 @@
 
 #include "zipstream.h"
 
-#define ZS_SIGNATURE_LFH	0x04034b50
-#define ZS_SIGNATURE_LFD	0x08074b50
-#define ZS_SIGNATURE_CDH	0x02014b50
-#define ZS_SIGNATURE_EOCD	0x06054b50
-
 #define ZS_LENGTH_LFH		30
 #define ZS_LENGTH_LFD		16
 #define ZS_LENGTH_CDH		46

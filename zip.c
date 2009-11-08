@@ -251,6 +251,7 @@ void zs_stager(ZS *zs) {
 		zs->stage_pos = 0;
 	}
 
+stager_top:
 	if(zs->stage == LF_HEADER) {
 		if(zs->zsf == NULL) {
 			zs->zsf = zs->zsd.files;
@@ -291,13 +292,14 @@ void zs_stager(ZS *zs) {
 
 			zs->zsf->crc32 = crc_finish(zs->zsf->crc32);
 
-			if(zs->zsf->prev != NULL)
+			if(zs->zsf->prev != NULL) {
 				zs->zsf->offset = zs->zsf->prev->offset;
 
-			zs->zsf->offset += ZS_LENGTH_LFH;
-			zs->zsf->offset += zs->zsf->lfname;
-			zs->zsf->offset += zs->zsf->fsize;
-			zs->zsf->offset += ZS_LENGTH_LFD;
+				zs->zsf->offset += ZS_LENGTH_LFH;
+				zs->zsf->offset += zs->zsf->prev->lfname;
+				zs->zsf->offset += zs->zsf->prev->fsize;
+				zs->zsf->offset += ZS_LENGTH_LFD;
+			}
 		}
 	}
 
@@ -308,16 +310,10 @@ void zs_stager(ZS *zs) {
 		else if(zs->stage_pos == ZS_LENGTH_LFD) {
 			zs->zsf = zs->zsf->next;
 
-			if(zs->zsf == NULL) {
-				zs->zsf = zs->zsd.files;
+			zs->stage = LF_HEADER;
+			zs->stage_pos = 0;
 
-				zs->stage = CD_HEADER;
-				zs->stage_pos = 0;
-			}
-			else {
-				zs->stage = LF_HEADER;
-				zs->stage_pos = 0;
-			}
+			goto stager_top;
 		}
 	}
 
@@ -341,14 +337,10 @@ void zs_stager(ZS *zs) {
 		if(zs->stage_pos == zs->zsf->lfname) {
 			zs->zsf = zs->zsf->next;
 
-			if(zs->zsf == NULL) {
-				zs->stage = EOCD;
-				zs->stage_pos = 0;
-			}
-			else {
-				zs->stage = CD_HEADER;
-				zs->stage_pos = 0;
-			}
+			zs->stage = CD_HEADER;
+			zs->stage_pos = 0;
+
+			goto stager_top;
 		}
 	}
 
@@ -376,10 +368,10 @@ void zs_build_lfh(ZS *zs) {
 		return;
 
 	// Signature
-	zs->stage_data[ 0] = ((ZS_SIGNATURE_LFH >>  0) && 0xFF);
-	zs->stage_data[ 1] = ((ZS_SIGNATURE_LFH >>  8) && 0xFF);
-	zs->stage_data[ 2] = ((ZS_SIGNATURE_LFH >> 16) && 0xFF);
-	zs->stage_data[ 3] = ((ZS_SIGNATURE_LFH >> 24) && 0xFF);
+	zs->stage_data[ 0] = 0x50;
+	zs->stage_data[ 1] = 0x4b;
+	zs->stage_data[ 2] = 0x03;
+	zs->stage_data[ 3] = 0x04;
 
 	// Version
 	zs->stage_data[ 4] = 0x0A;
@@ -444,10 +436,10 @@ void zs_build_lfd(ZS *zs) {
 		return;
 
 	// Signature
-	zs->stage_data[ 0] = ((ZS_SIGNATURE_LFD >>  0) && 0xFF);
-	zs->stage_data[ 1] = ((ZS_SIGNATURE_LFD >>  8) && 0xFF);
-	zs->stage_data[ 2] = ((ZS_SIGNATURE_LFD >> 16) && 0xFF);
-	zs->stage_data[ 3] = ((ZS_SIGNATURE_LFD >> 24) && 0xFF);
+	zs->stage_data[ 0] = 0x50;
+	zs->stage_data[ 1] = 0x4b;
+	zs->stage_data[ 2] = 0x07;
+	zs->stage_data[ 3] = 0x08;
 
 	// CRC32
 	zs->stage_data[ 4] = ((zs->zsf->crc32 >>  0) & 0xFF);
@@ -478,10 +470,10 @@ void zs_build_cdh(ZS *zs) {
 		return;
 
 	// Signature
-	zs->stage_data[ 0] = ((ZS_SIGNATURE_CDH >>  0) && 0xFF);
-	zs->stage_data[ 1] = ((ZS_SIGNATURE_CDH >>  8) && 0xFF);
-	zs->stage_data[ 2] = ((ZS_SIGNATURE_CDH >> 16) && 0xFF);
-	zs->stage_data[ 3] = ((ZS_SIGNATURE_CDH >> 24) && 0xFF);
+	zs->stage_data[ 0] = 0x50;
+	zs->stage_data[ 1] = 0x4b;
+	zs->stage_data[ 2] = 0x01;
+	zs->stage_data[ 3] = 0x02;
 
 	// Version Made By
 	zs->stage_data[ 4] = 0x14;
@@ -576,10 +568,10 @@ void zs_build_eocd(ZS *zs) {
 		return;
 
 	// Signature
-	zs->stage_data[ 0] = ((ZS_SIGNATURE_EOCD >>  0) && 0xFF);
-	zs->stage_data[ 1] = ((ZS_SIGNATURE_EOCD >>  8) && 0xFF);
-	zs->stage_data[ 2] = ((ZS_SIGNATURE_EOCD >> 16) && 0xFF);
-	zs->stage_data[ 3] = ((ZS_SIGNATURE_EOCD >> 24) && 0xFF);
+	zs->stage_data[ 0] = 0x50;
+	zs->stage_data[ 1] = 0x4b;
+	zs->stage_data[ 2] = 0x05;
+	zs->stage_data[ 3] = 0x06;
 
 	// Number Of This Disk
 	zs->stage_data[ 4] = 0x00;
