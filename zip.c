@@ -132,6 +132,9 @@ void zs_finalize(ZS *zs) {
 	return;
 }
 
+int zs_write(ZS *zs, char *buf, size_t sbuf) {
+}
+
 int zs_write_file(ZSFile *zsf, char *buf, int sbuf) {
 	int i;
 	int bytesread;
