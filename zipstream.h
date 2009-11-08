@@ -19,6 +19,7 @@ typedef struct ZSFile {
 
 	size_t offset;
 
+	struct ZSFile *prev;
 	struct ZSFile *next;
 } ZSFile;
 
