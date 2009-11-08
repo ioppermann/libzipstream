@@ -17,9 +17,10 @@
 #define ZS_LENGTH_MAX		ZS_LENGTH_CDH
 
 typedef struct ZSFile {
-	char *path;
-	size_t lfname;
+	char *fpath;
 	char *fname;
+
+	size_t lfname;
 
 	time_t ftime;
 	size_t fsize;
