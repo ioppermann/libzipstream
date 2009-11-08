@@ -14,4 +14,6 @@ int zs_write_directory(ZSDirectory *zs, char *buf, int sbuf);
 size_t zs_get_cdoffset(ZSDirectory *zs);
 size_t zs_get_cdsize(ZSDirectory *zs);
 
+void zs_stager(ZS *zs);
+
 #endif

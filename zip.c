@@ -37,6 +37,8 @@ ZS *zs_init(void) {
 	ZS *zs;
 
 	zs = (ZS *)calloc(1, sizeof(ZS));
+	if(zs == NULL)
+		return NULL;
 
 	crc_init();
 
@@ -72,6 +74,9 @@ int zs_add_file(ZS *zs, const char *path) {
 	struct stat sb;
 
 	if(zs == NULL)
+		return -1;
+
+	if(zs->finalized == 1)
 		return -1;
 
 	if(stat(path, &sb) == -1)
@@ -133,6 +138,104 @@ void zs_finalize(ZS *zs) {
 }
 
 int zs_write(ZS *zs, char *buf, size_t sbuf) {
+	int i, bytesread, bufpos;
+
+	if(zs == NULL)
+		return -1;
+
+	if(zs->finalized == 0)
+		return -1;
+
+	zs_stager(zs);
+}
+
+void zs_stager(ZS *zs) {
+	if(zs->stage == NONE) {
+		// select first file
+		zs->zsf = zs->zsd.files;
+
+		zs->stage = LF_HEADER;
+		zs->stage_pos = 0;
+	}
+
+	if(zs->stage == LF_HEADER) {
+		if(zs->zsf == NULL) {
+			// select first file
+			zs->zsf = zs->zsd.files;
+
+			zs->stage = CD_HEADER;
+			zs->stage_pos = 0;
+		}
+		else {
+			if(zs->stage_pos == ZS_LENGTH_LFH) {
+				zs->stage = LF_NAME;
+				zs->stage_pos = 0;
+			}
+		}
+	}
+
+	if(zs->stage == LF_NAME) {
+		if(zs->stage_pos == zs->zsf->lfname) {
+			zs->stage = LF_DATA;
+			zs->stage_pos = 0;
+
+			zs->fp = fopen(zs->zsf->path, "rb");
+			if(zs->fp == NULL)
+				zs->stage = ERROR;
+		}
+	}
+
+	if(zs->stage == LF_DATA) {
+		if(zs->stage_pos == zs->zsf->fsize) {
+			zs->stage = LF_DESCRIPTOR;
+			zs->stage_pos = 0;
+
+			fclose(zs->fp);
+		}
+	}
+
+	if(zs->stage == LF_DESCRIPTOR) {
+		if(zs->stage_pos == ZS_LENGTH_LFD) {
+			zs->zsf = zs->zsf->next;
+
+			zs->stage = LF_HEADER;
+			zs->stage_pos = 0;
+		}
+	}
+
+	if(zs->stage == CD_HEADER) {
+		if(zs->zsf == NULL) {
+			zs->stage = EOCD;
+			zs->stage_pos = 0;
+		}
+		else {
+			if(zs->stage_pos == ZS_LENGTH_CDH) {
+				zs->stage = CD_NAME;
+				zs->stage_pos = 0;
+			}
+		}
+	}
+
+	if(zs->stage == CD_NAME) {
+		if(zs->stage_pos == zs->zsf->lfname) {
+			zs->zsf = zs->zsf->next;
+
+			zs->stage = CD_HEADER;
+			zs->stage_pos = 0;
+		}
+	}
+
+	if(zs->stage == EOCD) {
+		if(zs->stage_pos == ZS_LENGTH_EOCD) {
+			zs->stage = FIN;
+			zs->stage_pos = 0;
+		}
+	}
+
+	if(zs->stage == FIN)
+		zs->stage = FIN;
+
+	return;
 }
 
 int zs_write_file(ZSFile *zsf, char *buf, int sbuf) {
