@@ -5,50 +5,25 @@
 #include <libgen.h>	// basename(3)
 #include <sys/types.h>
 #include <sys/stat.h>
-#include "zipstream.h"
-#include "crc32.h"
 
-ZSDirectory *zs_init(void);
-void zs_free(ZSDirectory *zs);
-ZSFile *zs_add_file(ZSDirectory *zs, const char *path);
-int zs_write_file(ZSFile *zsf, char *buf, int sbuf);
-void zs_build_lfheader(ZSFile *zsf);
-void zs_build_descriptor(ZSFile *zsf);
-int zs_write_directory(ZSDirectory *zs, char *buf, int sbuf);
-void zs_build_offsets(ZSDirectory *zs);
-size_t zs_get_cdoffset(ZSDirectory *zs);
-size_t zs_get_cdsize(ZSDirectory *zs);
-void zs_build_eocd(ZSDirectory *zs);
-void zs_build_cdheader(ZSFile *zsf);
+#include "zipstream.h"
+#include "zip.h"
+#include "crc32.h"
 
 int main(int argc, char **argv) {
 	int bytes;
 	char buf[256];
-	ZSDirectory *zs;
-	ZSFile *zsf;
+	ZS *zs;
 
 	zs = zs_init();
 
-	zsf = zs_add_file(zs, "foobar.mp4");
-	while((bytes = zs_write_file(zsf, buf, sizeof(buf))) > -1) {
-		fprintf(stderr, "%d\n", bytes);
-		fwrite(buf, 1, bytes, stdout);
-	}
+	zs_add_file(zs, "foobar.mp4");
+	zs_add_file(zs, "1171032474.mpg");
+	zs_add_file(zs, "asnumber.zip");
 
-	// 1171032474.mpg
-	zsf = zs_add_file(zs, "1171032474.mpg");
-	while((bytes = zs_write_file(zsf, buf, sizeof(buf))) > -1) {
-		fprintf(stderr, "%d\n", bytes);
-		fwrite(buf, 1, bytes, stdout);
-	}
+	zs_finalize(zs);
 
-	zsf = zs_add_file(zs, "asnumber.zip");
-	while((bytes = zs_write_file(zsf, buf, sizeof(buf))) > -1) {
-		fprintf(stderr, "%d\n", bytes);
-		fwrite(buf, 1, bytes, stdout);
-	}
-
-	while((bytes = zs_write_directory(zs, buf, sizeof(buf))) > -1) {
+	while((bytes = zs_write(zs, buf, sizeof(buf))) > -1) {
 		fprintf(stderr, "%d\n", bytes);
 		fwrite(buf, 1, bytes, stdout);
 	}
