@@ -8,7 +8,7 @@ zs_add_file(zs, "foo.txt", "data/foo.txt");
 zs_add_file(zs, "bar.txt", "data/bar.txt");
 zs_add_file(zs, "baz.doc", "data/baz.doc");
 
-zs_add_directory(zs, "foobar");
+zs_add_directory(zs, "foobar");				// version to extract: 2.0
 zs_add_file(zs, "foobar/biz.txt", "data/biz.txt");
 
 zs_finalize(zs);
@@ -19,5 +19,7 @@ while((bytes = zs_write(zs, buf, sizeof(buf)) > 0)
 zs_free(zs);
 
 /* later
-Compression with libarchive
+zlib   http://www.zlib.net/ (deflate)			// method:  8, version to extract: 2.0
+bzip2  http://www.bzip.org/				// method: 12, version to extract: 4.6
+lzma   http://www.7-zip.org/				// method: 14, version to extract: 6.3
 */
