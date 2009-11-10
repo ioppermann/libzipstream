@@ -18,3 +18,6 @@ while((bytes = zs_write(zs, buf, sizeof(buf)) > 0)
 
 zs_free(zs);
 
+/* later
+Compression with libarchive
+*/
