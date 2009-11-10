@@ -4,14 +4,12 @@ ZS *zs;
 
 zs = zs_init();
 
-zs_add_file(zs, "foo.txt");
-zs_add_file(zs, "bar.txt");
-zs_add_file(zs, "baz.doc");
+zs_add_file(zs, "foo.txt", "data/foo.txt");
+zs_add_file(zs, "bar.txt", "data/bar.txt");
+zs_add_file(zs, "baz.doc", "data/baz.doc");
 
-/* later
 zs_add_directory(zs, "foobar");
-zs_add_file(zs, "foobar/biz.txt");
-*/
+zs_add_file(zs, "foobar/biz.txt", "data/biz.txt");
 
 zs_finalize(zs);
 
