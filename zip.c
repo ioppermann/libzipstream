@@ -291,6 +291,8 @@ int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf) {
 			if(zs->deflate.flush != Z_FINISH) {
 				zs->deflate.avail_in = fread(zs->deflate.in, 1, 16384, zs->fp);
 
+				zs->zsf->crc32 = crc_partial(zs->zsf->crc32, zs->deflate.in, zs->deflate.avail_in);
+
 				zs->deflate.strm.avail_in = zs->deflate.avail_in;
 				zs->deflate.strm.next_in = zs->deflate.in;
 
@@ -307,8 +309,6 @@ int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf) {
 			}
 		}
 	}
-
-	zs->zsf->crc32 = crc_partial(zs->zsf->crc32, buf, bytesread);
 
 	zs->zsf->fsize_compressed += bytesread;
 
