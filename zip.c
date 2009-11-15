@@ -16,9 +16,9 @@ int main(int argc, char **argv) {
 
 	zs = zs_init();
 
-	zs_add_file(zs, "bla/foobar.mp4", "data/foobar.mp4");
-	zs_add_file(zs, "bla/1171032474.mpg", "data/1171032474.mpg");
-	zs_add_file(zs, "bla/asnumber.zip", "data/asnumber.zip");
+	zs_add_file(zs, "bla/foobar.mp4", "data/foobar.mp4", ZS_COMPRESS_NONE);
+	zs_add_file(zs, "bla/1171032474.mpg", "data/1171032474.mpg", ZS_COMPRESS_NONE);
+	zs_add_file(zs, "bla/asnumber.zip", "data/asnumber.zip", ZS_COMPRESS_NONE);
 
 	zs_finalize(zs);
 
@@ -67,7 +67,7 @@ void zs_free(ZS *zs) {
 	return;
 }
 
-int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath) {
+int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int compression) {
 	ZSFile *zsf, *pzsf;
 	struct stat sb;
 
@@ -76,6 +76,14 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath) {
 
 	if(zs->finalized == 1)
 		return -1;
+
+	switch(compression) {
+		case ZS_COMPRESS_NONE:
+		case ZS_COMPRESS_DEFLATE:
+			break;
+		default:
+			return -1;
+	}
 
 	if(stat(sourcepath, &sb) == -1)
 		return -1;
@@ -106,6 +114,7 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath) {
 
 	zsf->ftime = sb.st_mtime;
 	zsf->fsize = sb.st_size;
+	zsf->fsize_compressed = zsf->fsize;
 
 	if(zs->zsd.nfiles != 0) {
 		pzsf = zs->zsd.files;
@@ -227,10 +236,16 @@ int zs_write_filedata(ZS *zs, char *buf, int sbuf) {
 
 	zs->zsf->crc32 = crc_partial(zs->zsf->crc32, buf, bytesread);
 
-	if(bytesread < sbuf)	// EOF
+	if(bytesread < sbuf) {	// EOF
 		zs->zsf->fsize = zs->stage_pos;
+		zs->zsf->fsize_compressed = zs->stage_pos;
+	}
 
 	return bytesread;
+}
+
+int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf) {
+	return 0;
 }
 
 void zs_stager(ZS *zs) {
@@ -368,7 +383,7 @@ void zs_build_lfh(ZS *zs) {
 	zs->stage_data[ 5] = 0x00;
 
 	// General Purpose
-	zs->stage_data[ 6] = 0x08;
+	zs->stage_data[ 6] = 0x08;	// Bit3 : CRC32, file sizes unknown at this time
 	zs->stage_data[ 7] = 0x00;
 
 	// Compression Method
@@ -438,16 +453,16 @@ void zs_build_lfd(ZS *zs) {
 	zs->stage_data[ 7] = ((zs->zsf->crc32 >> 24) & 0xFF);
 
 	// Compressed Size
-	zs->stage_data[ 8] = ((zs->zsf->fsize >>  0) & 0xFF);
-	zs->stage_data[ 9] = ((zs->zsf->fsize >>  8) & 0xFF);
-	zs->stage_data[10] = ((zs->zsf->fsize >> 16) & 0xFF);
-	zs->stage_data[11] = ((zs->zsf->fsize >> 24) & 0xFF);
+	zs->stage_data[ 8] = ((zs->zsf->fsize_compressed >>  0) & 0xFF);
+	zs->stage_data[ 9] = ((zs->zsf->fsize_compressed >>  8) & 0xFF);
+	zs->stage_data[10] = ((zs->zsf->fsize_compressed >> 16) & 0xFF);
+	zs->stage_data[11] = ((zs->zsf->fsize_compressed >> 24) & 0xFF);
 
 	// Uncompressed Size
-	zs->stage_data[12] = zs->stage_data[ 8];
-	zs->stage_data[13] = zs->stage_data[ 9];
-	zs->stage_data[14] = zs->stage_data[10];
-	zs->stage_data[15] = zs->stage_data[11];
+	zs->stage_data[12] = ((zs->zsf->fsize >>  0) & 0xFF);
+	zs->stage_data[13] = ((zs->zsf->fsize >>  8) & 0xFF);
+	zs->stage_data[14] = ((zs->zsf->fsize >> 16) & 0xFF);
+	zs->stage_data[15] = ((zs->zsf->fsize >> 24) & 0xFF);
 
 	return;
 }
@@ -474,7 +489,7 @@ void zs_build_cdh(ZS *zs) {
 	zs->stage_data[ 7] = 0x00;
 
 	// General Purpose
-	zs->stage_data[ 8] = 0x08;
+	zs->stage_data[ 8] = 0x08;	// Bit3 : CRC32, file sizes unknown at this time (ignored here)
 	zs->stage_data[ 9] = 0x00;
 
 	// Compression Method
@@ -505,16 +520,16 @@ void zs_build_cdh(ZS *zs) {
 	zs->stage_data[19] = ((zs->zsf->crc32 >> 24) & 0xFF);
 
 	// Compressed Size
-	zs->stage_data[20] = ((zs->zsf->fsize >>  0) & 0xFF);
-	zs->stage_data[21] = ((zs->zsf->fsize >>  8) & 0xFF);
-	zs->stage_data[22] = ((zs->zsf->fsize >> 16) & 0xFF);
-	zs->stage_data[23] = ((zs->zsf->fsize >> 24) & 0xFF);
+	zs->stage_data[20] = ((zs->zsf->fsize_compressed >>  0) & 0xFF);
+	zs->stage_data[21] = ((zs->zsf->fsize_compressed >>  8) & 0xFF);
+	zs->stage_data[22] = ((zs->zsf->fsize_compressed >> 16) & 0xFF);
+	zs->stage_data[23] = ((zs->zsf->fsize_compressed >> 24) & 0xFF);
 
 	// Uncompressed Size
-	zs->stage_data[24] = zs->stage_data[20];
-	zs->stage_data[25] = zs->stage_data[21];
-	zs->stage_data[26] = zs->stage_data[22];
-	zs->stage_data[27] = zs->stage_data[23];
+	zs->stage_data[24] = ((zs->zsf->fsize >>  0) & 0xFF);
+	zs->stage_data[25] = ((zs->zsf->fsize >>  8) & 0xFF);
+	zs->stage_data[26] = ((zs->zsf->fsize >> 16) & 0xFF);
+	zs->stage_data[27] = ((zs->zsf->fsize >> 24) & 0xFF);
 
 	// Filename Length
 	zs->stage_data[28] = ((zs->zsf->lfname >>  0) & 0xFF);
