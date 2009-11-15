@@ -7,7 +7,7 @@
 #define ZS_STAGE_LENGTH_MAX		46
 
 #define ZS_COMPRESS_NONE		0
-#define ZS_COMPRESS_DEFLATE		1
+#define ZS_COMPRESS_DEFLATE		8
 
 typedef struct ZSFile {
 	char *fpath;
@@ -23,6 +23,8 @@ typedef struct ZSFile {
 
 	size_t offset;
 
+	int compression;
+
 	struct ZSFile *prev;
 	struct ZSFile *next;
 } ZSFile;
@@ -34,7 +36,7 @@ typedef struct {
 
 typedef enum {NONE = 0, LF_HEADER, LF_NAME, LF_DATA, LF_DESCRIPTOR, CD_HEADER, CD_NAME, EOCD, FIN, ERROR} stages;
 
-typedef struct {
+typedef struct ZS {
 	// Current file
 	ZSFile *zsf;
 
@@ -55,6 +57,9 @@ typedef struct {
 
 	// Directory
 	ZSDirectory zsd;
+
+	// File data writer
+	int (*write_filedata)(struct ZS *, char *, int);
 } ZS;
 
 ZS *zs_init(void);

@@ -116,6 +116,8 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int comp
 	zsf->fsize = sb.st_size;
 	zsf->fsize_compressed = zsf->fsize;
 
+	zsf->compression = compression;
+
 	if(zs->zsd.nfiles != 0) {
 		pzsf = zs->zsd.files;
 
@@ -177,7 +179,7 @@ int zs_write(ZS *zs, char *buf, int sbuf) {
 			bytes = zs_write_filename(zs, buf, sbuf);
 			break;
 		case LF_DATA:
-			bytes = zs_write_filedata(zs, buf, sbuf);
+			bytes = zs->write_filedata(zs, buf, sbuf);
 			break;
 		default:
 			return -1;
@@ -245,6 +247,9 @@ int zs_write_filedata(ZS *zs, char *buf, int sbuf) {
 }
 
 int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf) {
+	zs->zsf->fsize = 0;
+	zs->zsf->fsize_compressed = 0;
+
 	return 0;
 }
 
@@ -285,6 +290,15 @@ stager_top:
 			zs->fp = fopen(zs->zsf->fpath, "rb");
 			if(zs->fp == NULL)
 				zs->stage = ERROR;
+
+			switch(zs->zsf->compression) {
+				case ZS_COMPRESS_NONE:
+					zs->write_filedata = zs_write_filedata;
+					break;
+				case ZS_COMPRESS_DEFLATE:
+					zs->write_filedata = zs_write_filedata_deflate;
+					break;
+			}
 		}
 	}
 
@@ -302,7 +316,7 @@ stager_top:
 
 				zs->zsf->offset += ZS_LENGTH_LFH;
 				zs->zsf->offset += zs->zsf->prev->lfname;
-				zs->zsf->offset += zs->zsf->prev->fsize;
+				zs->zsf->offset += zs->zsf->prev->fsize_compressed;
 				zs->zsf->offset += ZS_LENGTH_LFD;
 			}
 		}
@@ -387,8 +401,8 @@ void zs_build_lfh(ZS *zs) {
 	zs->stage_data[ 7] = 0x00;
 
 	// Compression Method
-	zs->stage_data[ 8] = 0x00;	// Store
-	zs->stage_data[ 9] = 0x00;
+	zs->stage_data[ 8] = ((zs->zsf->compression >>  0) & 0xFF);
+	zs->stage_data[ 9] = ((zs->zsf->compression >>  8) & 0xFF);
 
 	// Modification Time
 	ltime = localtime(&zs->zsf->ftime);
@@ -493,8 +507,8 @@ void zs_build_cdh(ZS *zs) {
 	zs->stage_data[ 9] = 0x00;
 
 	// Compression Method
-	zs->stage_data[10] = 0x00;
-	zs->stage_data[11] = 0x00;
+	zs->stage_data[10] = ((zs->zsf->compression >>  0) & 0xFF);
+	zs->stage_data[11] = ((zs->zsf->compression >>  8) & 0xFF);
 
 	// Modification Time
 	ltime = localtime(&zs->zsf->ftime);
@@ -654,7 +668,7 @@ size_t zs_get_cdoffset(ZS *zs) {
 
 	offset += ZS_LENGTH_LFH;
 	offset += zsf->lfname;
-	offset += zsf->fsize;
+	offset += zsf->fsize_compressed;
 	offset += ZS_LENGTH_LFD;
 
 	return offset;

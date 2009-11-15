@@ -16,6 +16,7 @@ void zs_build_eocd(ZS *zs);
 int zs_write_stagedata(ZS *zs, char *buf, int sbuf, int size);
 int zs_write_filename(ZS *zs, char *buf, int sbuf);
 int zs_write_filedata(ZS *zs, char *buf, int sbuf);
+int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf);
 
 size_t zs_get_cdoffset(ZS *zs);
 size_t zs_get_cdsize(ZS *zs);
