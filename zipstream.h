@@ -19,6 +19,8 @@ typedef struct ZSFile {
 
 	size_t offset;
 
+	int is_directory;
+
 	struct ZSFile *prev;
 	struct ZSFile *next;
 } ZSFile;
@@ -54,7 +56,7 @@ typedef struct {
 } ZS;
 
 ZS *zs_init(void);
-int zs_add_file(ZS *zs, const char *path);
+int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath);
 void zs_finalize(ZS *zs);
 int zs_write(ZS *zs, char *buf, int sbuf);
 void zs_free(ZS *zs);

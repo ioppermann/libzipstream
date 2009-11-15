@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <libgen.h>	// basename(3)
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -17,9 +16,9 @@ int main(int argc, char **argv) {
 
 	zs = zs_init();
 
-	zs_add_file(zs, "data/foobar.mp4");
-	zs_add_file(zs, "data/1171032474.mpg");
-	zs_add_file(zs, "data/asnumber.zip");
+	zs_add_file(zs, "bla/foobar.mp4", "data/foobar.mp4");
+	zs_add_file(zs, "bla/1171032474.mpg", "data/1171032474.mpg");
+	zs_add_file(zs, "bla/asnumber.zip", "data/asnumber.zip");
 
 	zs_finalize(zs);
 
@@ -68,8 +67,7 @@ void zs_free(ZS *zs) {
 	return;
 }
 
-int zs_add_file(ZS *zs, const char *path) {
-	char *fname;
+int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath) {
 	ZSFile *zsf, *pzsf;
 	struct stat sb;
 
@@ -79,7 +77,7 @@ int zs_add_file(ZS *zs, const char *path) {
 	if(zs->finalized == 1)
 		return -1;
 
-	if(stat(path, &sb) == -1)
+	if(stat(sourcepath, &sb) == -1)
 		return -1;
 
 	if(!S_ISREG(sb.st_mode))
@@ -89,22 +87,14 @@ int zs_add_file(ZS *zs, const char *path) {
 	if(zsf == NULL)
 		return -1;
 
-	zsf->fpath = strdup(path);
+	zsf->fpath = strdup(sourcepath);
 	if(zsf->fpath == NULL) {
 		free(zsf);
 
 		return -1;
 	}
 
-	fname = basename(zsf->fpath);
-	if(fname == NULL) {
-		free(zsf->fpath);
-		free(zsf);
-
-		return -1;
-	}
-
-	zsf->fname = strdup(fname);
+	zsf->fname = strdup(targetpath);
 	if(zsf->fname == NULL) {
 		free(zsf->fpath);
 		free(zsf);
