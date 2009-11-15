@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <time.h>
+#include <zlib.h>
 
 #define ZS_STAGE_LENGTH_MAX		46
 
@@ -60,6 +61,14 @@ typedef struct ZS {
 
 	// File data writer
 	int (*write_filedata)(struct ZS *, char *, int);
+
+	struct {
+		z_stream strm;
+		int init;
+		int avail_in;
+		int flush;
+		char in[16384];
+	} deflate;
 } ZS;
 
 ZS *zs_init(void);

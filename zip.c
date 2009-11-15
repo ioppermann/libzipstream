@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <zlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -114,7 +115,7 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int comp
 
 	zsf->ftime = sb.st_mtime;
 	zsf->fsize = sb.st_size;
-	zsf->fsize_compressed = zsf->fsize;
+	zsf->fsize_compressed = 0;
 
 	zsf->compression = compression;
 
@@ -238,7 +239,9 @@ int zs_write_filedata(ZS *zs, char *buf, int sbuf) {
 
 	zs->zsf->crc32 = crc_partial(zs->zsf->crc32, buf, bytesread);
 
-	if(bytesread < sbuf) {	// EOF
+	zs->zsf->fsize_compressed += bytesread;
+
+	if(ferror(zs->fp)) {	// ERROR
 		zs->zsf->fsize = zs->stage_pos;
 		zs->zsf->fsize_compressed = zs->stage_pos;
 	}
@@ -247,10 +250,61 @@ int zs_write_filedata(ZS *zs, char *buf, int sbuf) {
 }
 
 int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf) {
-	zs->zsf->fsize = 0;
-	zs->zsf->fsize_compressed = 0;
+	int bytesread;
 
-	return 0;
+	if(zs->stage_pos == 0 && zs->deflate.init == 0) {
+		zs->deflate.init = 1;
+		zs->deflate.avail_in = 0;
+		zs->deflate.flush = Z_NO_FLUSH;
+
+		zs->deflate.strm.zalloc = Z_NULL;
+		zs->deflate.strm.zfree = Z_NULL;
+		zs->deflate.strm.opaque = Z_NULL;
+
+		deflateInit2(&zs->deflate.strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY);
+
+		zs->deflate.strm.avail_out = sbuf;
+		zs->deflate.strm.next_out = buf;
+	}
+
+	bytesread = 0;
+
+	while(bytesread != sbuf) {
+		zs->deflate.strm.avail_out = sbuf;
+		zs->deflate.strm.next_out = buf;
+
+		deflate(&zs->deflate.strm, zs->deflate.flush);
+
+		bytesread += sbuf - zs->deflate.strm.avail_out;
+
+		if(zs->deflate.strm.avail_out != 0) {
+			zs->stage_pos += zs->deflate.avail_in;
+
+			if(zs->deflate.flush != Z_FINISH) {
+				zs->deflate.avail_in = fread(zs->deflate.in, 1, 16384, zs->fp);
+
+				zs->deflate.strm.avail_in = zs->deflate.avail_in;
+				zs->deflate.strm.next_in = zs->deflate.in;
+
+				zs->deflate.flush = feof(zs->fp) ? Z_FINISH : Z_NO_FLUSH;
+			}
+			else {
+				deflateEnd(&zs->deflate.strm);
+
+				zs->zsf->fsize = zs->stage_pos;
+
+				zs->deflate.init = 1;
+
+				break;
+			}
+		}
+	}
+
+	zs->zsf->crc32 = crc_partial(zs->zsf->crc32, buf, bytesread);
+
+	zs->zsf->fsize_compressed += bytesread;
+
+	return bytesread;
 }
 
 void zs_stager(ZS *zs) {
@@ -304,6 +358,7 @@ stager_top:
 
 	if(zs->stage == LF_DATA) {
 		if(zs->stage_pos == zs->zsf->fsize) {
+			fprintf(stderr, "%d %d\n", zs->zsf->fsize, zs->zsf->fsize_compressed);
 			zs->stage = LF_DESCRIPTOR;
 			zs->stage_pos = 0;
 
