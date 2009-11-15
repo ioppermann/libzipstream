@@ -25,6 +25,7 @@ typedef struct ZSFile {
 	size_t offset;
 
 	int compression;
+	int version;
 
 	struct ZSFile *prev;
 	struct ZSFile *next;

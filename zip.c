@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
 
 	zs_add_file(zs, "bla/foobar.mp4", "data/foobar.mp4", ZS_COMPRESS_NONE);
 	zs_add_file(zs, "bla/1171032474.mpg", "data/1171032474.mpg", ZS_COMPRESS_NONE);
-	zs_add_file(zs, "bla/asnumber.zip", "data/asnumber.zip", ZS_COMPRESS_NONE);
+	zs_add_file(zs, "bla/asnumber.zip", "data/asnumber.zip", ZS_COMPRESS_DEFLATE);
 
 	zs_finalize(zs);
 
@@ -118,6 +118,14 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int comp
 	zsf->fsize_compressed = 0;
 
 	zsf->compression = compression;
+	switch(zsf->compression) {
+		case ZS_COMPRESS_NONE:
+			zsf->version = 10;
+			break;
+		case ZS_COMPRESS_DEFLATE:
+			zsf->version = 20;
+			break;
+	}
 
 	if(zs->zsd.nfiles != 0) {
 		pzsf = zs->zsd.files;
@@ -448,8 +456,8 @@ void zs_build_lfh(ZS *zs) {
 	zs->stage_data[ 3] = 0x04;
 
 	// Version
-	zs->stage_data[ 4] = 0x0A;
-	zs->stage_data[ 5] = 0x00;
+	zs->stage_data[ 4] = ((zs->zsf->version >>  0) & 0xFF);
+	zs->stage_data[ 5] = ((zs->zsf->version >>  8) & 0xFF);
 
 	// General Purpose
 	zs->stage_data[ 6] = 0x08;	// Bit3 : CRC32, file sizes unknown at this time
@@ -554,8 +562,8 @@ void zs_build_cdh(ZS *zs) {
 	zs->stage_data[ 5] = 0x00;
 
 	// Version To Extract
-	zs->stage_data[ 6] = 0x0A;
-	zs->stage_data[ 7] = 0x00;
+	zs->stage_data[ 6] = ((zs->zsf->version >>  0) & 0xFF);
+	zs->stage_data[ 7] = ((zs->zsf->version >>  8) & 0xFF);
 
 	// General Purpose
 	zs->stage_data[ 8] = 0x08;	// Bit3 : CRC32, file sizes unknown at this time (ignored here)
