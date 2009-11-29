@@ -10,6 +10,8 @@
 #define ZS_COMPRESS_NONE		0
 #define ZS_COMPRESS_DEFLATE		8
 
+#define ZS_BUFFER_DEFLATE		4096
+
 typedef struct ZSFile {
 	char *fpath;
 	char *fname;
@@ -19,6 +21,8 @@ typedef struct ZSFile {
 	time_t ftime;
 	size_t fsize;
 	size_t fsize_compressed;
+
+	int completed;
 
 	unsigned long crc32;
 
@@ -68,7 +72,7 @@ typedef struct ZS {
 		int init;
 		int avail_in;
 		int flush;
-		char in[16384];
+		char in[ZS_BUFFER_DEFLATE];
 	} deflate;
 } ZS;
 
