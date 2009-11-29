@@ -18,7 +18,7 @@ int zs_write_filename(ZS *zs, char *buf, int sbuf);
 
 int zs_write_filedata_none(ZS *zs, char *buf, int sbuf);
 int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf);
-int zs_write_filedata_bzip(ZS *zs, char *buf, int sbuf);
+int zs_write_filedata_bzip2(ZS *zs, char *buf, int sbuf);
 
 size_t zs_get_cdoffset(ZS *zs);
 size_t zs_get_cdsize(ZS *zs);

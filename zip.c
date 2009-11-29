@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include <zlib.h>
+#include <bzlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -18,8 +19,8 @@ int main(int argc, char **argv) {
 	zs = zs_init();
 
 	zs_add_file(zs, "bla/foobar.mp4", "data/foobar.mp4", ZS_COMPRESS_NONE);
-	zs_add_file(zs, "bla/1171032474.mpg", "data/1171032474.mpg", ZS_COMPRESS_DEFLATE);
-	zs_add_file(zs, "bla/asnumber.zip", "data/asnumber.zip", ZS_COMPRESS_NONE);
+	zs_add_file(zs, "bla/1171032474.mpg", "data/1171032474.mpg", ZS_COMPRESS_BZIP2);
+	zs_add_file(zs, "bla/asnumber.zip", "data/asnumber.zip", ZS_COMPRESS_DEFLATE);
 
 	zs_finalize(zs);
 
@@ -81,6 +82,7 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int comp
 	switch(compression) {
 		case ZS_COMPRESS_NONE:
 		case ZS_COMPRESS_DEFLATE:
+		case ZS_COMPRESS_BZIP2:
 			break;
 		default:
 			return -1;
@@ -124,6 +126,9 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int comp
 			break;
 		case ZS_COMPRESS_DEFLATE:
 			zsf->version = 20;
+			break;
+		case ZS_COMPRESS_BZIP2:
+			zsf->version = 46;
 			break;
 	}
 
@@ -318,6 +323,61 @@ int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf) {
 	return bytesread;
 }
 
+int zs_write_filedata_bzip2(ZS *zs, char *buf, int sbuf) {
+	int bytesread;
+
+	if(zs->bzip2.init == 0) {
+		zs->bzip2.init = 1;
+		zs->bzip2.avail_in = 0;
+		zs->bzip2.flush = Z_NO_FLUSH;
+
+		zs->bzip2.strm.bzalloc = Z_NULL;
+		zs->bzip2.strm.bzfree = Z_NULL;
+		zs->bzip2.strm.opaque = Z_NULL;
+
+		BZ2_bzCompressInit(&zs->bzip2.strm, 9, 0, 30);
+	}
+
+	bytesread = 0;
+
+	zs->bzip2.strm.avail_out = sbuf;
+	zs->bzip2.strm.next_out = buf;
+
+	do {
+		BZ2_bzCompress(&zs->bzip2.strm, zs->bzip2.flush);
+
+		bytesread = sbuf - zs->bzip2.strm.avail_out;
+
+		if(bytesread == 0) {
+			zs->stage_pos += zs->bzip2.avail_in;
+
+			if(zs->bzip2.flush == BZ_FINISH) {
+				BZ2_bzCompressEnd(&zs->bzip2.strm);
+
+				zs->zsf->fsize = zs->stage_pos;
+				zs->zsf->completed = 1;
+
+				zs->bzip2.init = 0;
+
+				break;
+			}
+
+			zs->bzip2.avail_in = fread(zs->bzip2.in, 1, sizeof(zs->bzip2.in), zs->fp);
+
+			zs->zsf->crc32 = crc_partial(zs->zsf->crc32, zs->bzip2.in, zs->bzip2.avail_in);
+
+			zs->bzip2.strm.avail_in = zs->bzip2.avail_in;
+			zs->bzip2.strm.next_in = zs->bzip2.in;
+
+			zs->bzip2.flush = feof(zs->fp) ? BZ_FINISH : BZ_RUN;
+		}
+	} while(bytesread == 0);
+
+	zs->zsf->fsize_compressed += bytesread;
+
+	return bytesread;
+}
+
 void zs_stager(ZS *zs) {
 	if(zs->stage == NONE) {
 		zs->zsf = zs->zsd.files;
@@ -362,6 +422,9 @@ stager_top:
 					break;
 				case ZS_COMPRESS_DEFLATE:
 					zs->write_filedata = zs_write_filedata_deflate;
+					break;
+				case ZS_COMPRESS_BZIP2:
+					zs->write_filedata = zs_write_filedata_bzip2;
 					break;
 			}
 		}

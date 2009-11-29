@@ -4,13 +4,16 @@
 #include <stdio.h>
 #include <time.h>
 #include <zlib.h>
+#include <bzlib.h>
 
 #define ZS_STAGE_LENGTH_MAX		46
 
 #define ZS_COMPRESS_NONE		0
 #define ZS_COMPRESS_DEFLATE		8
+#define ZS_COMPRESS_BZIP2		12
 
 #define ZS_BUFFER_DEFLATE		4096
+#define ZS_BUFFER_BZIP2			4096
 
 typedef struct ZSFile {
 	char *fpath;
@@ -74,6 +77,14 @@ typedef struct ZS {
 		int flush;
 		char in[ZS_BUFFER_DEFLATE];
 	} deflate;
+
+	struct {
+		bz_stream strm;
+		int init;
+		int avail_in;
+		int flush;
+		char in[ZS_BUFFER_BZIP2];
+	} bzip2;
 } ZS;
 
 ZS *zs_init(void);
