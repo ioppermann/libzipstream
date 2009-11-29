@@ -18,13 +18,13 @@ int main(int argc, char **argv) {
 	zs = zs_init();
 
 	zs_add_file(zs, "bla/foobar.mp4", "data/foobar.mp4", ZS_COMPRESS_NONE);
-	zs_add_file(zs, "bla/1171032474.mpg", "data/1171032474.mpg", ZS_COMPRESS_NONE);
-	zs_add_file(zs, "bla/asnumber.zip", "data/asnumber.zip", ZS_COMPRESS_DEFLATE);
+	zs_add_file(zs, "bla/1171032474.mpg", "data/1171032474.mpg", ZS_COMPRESS_DEFLATE);
+	zs_add_file(zs, "bla/asnumber.zip", "data/asnumber.zip", ZS_COMPRESS_NONE);
 
 	zs_finalize(zs);
 
 	while((bytes = zs_write(zs, buf, sizeof(buf))) > 0) {
-		fprintf(stderr, "%d\n", bytes);
+		//fprintf(stderr, "%d\n", bytes);
 		fwrite(buf, 1, bytes, stdout);
 	}
 
@@ -162,37 +162,41 @@ int zs_write(ZS *zs, char *buf, int sbuf) {
 	if(zs->finalized == 0)
 		return -1;
 
-	zs_stager(zs);
+	bytes = 0;
 
-	if(zs->stage == ERROR)
-		return -1;
+	do {
+		zs_stager(zs);
 
-	if(zs->stage == FIN)
-		return 0;
-
-	switch(zs->stage) {
-		case LF_HEADER:
-			bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_LFH);
-			break;
-		case LF_DESCRIPTOR:
-			bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_LFD);
-			break;
-		case CD_HEADER:
-			bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_CDH);
-			break;
-		case EOCD:
-			bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_EOCD);
-			break;
-		case LF_NAME:
-		case CD_NAME:
-			bytes = zs_write_filename(zs, buf, sbuf);
-			break;
-		case LF_DATA:
-			bytes = zs->write_filedata(zs, buf, sbuf);
-			break;
-		default:
+		if(zs->stage == ERROR)
 			return -1;
-	}
+
+		if(zs->stage == FIN)
+			return 0;
+
+		switch(zs->stage) {
+			case LF_HEADER:
+				bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_LFH);
+				break;
+			case LF_DESCRIPTOR:
+				bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_LFD);
+				break;
+			case CD_HEADER:
+				bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_CDH);
+				break;
+			case EOCD:
+				bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_EOCD);
+				break;
+			case LF_NAME:
+			case CD_NAME:
+				bytes = zs_write_filename(zs, buf, sbuf);
+				break;
+			case LF_DATA:
+				bytes = zs->write_filedata(zs, buf, sbuf);
+				break;
+			default:
+				return -1;
+		}
+	} while(bytes == 0);
 
 	return bytes;
 }
@@ -239,7 +243,7 @@ int zs_write_filename(ZS *zs, char *buf, int sbuf) {
 	return bytes;
 }
 
-int zs_write_filedata(ZS *zs, char *buf, int sbuf) {
+int zs_write_filedata_none(ZS *zs, char *buf, int sbuf) {
 	int bytesread;
 
 	bytesread = fread(buf, 1, sbuf, zs->fp);
@@ -249,9 +253,11 @@ int zs_write_filedata(ZS *zs, char *buf, int sbuf) {
 
 	zs->zsf->fsize_compressed += bytesread;
 
-	if(ferror(zs->fp)) {	// ERROR
+	if(ferror(zs->fp) || feof(zs->fp)) {	// ERROR or EOF
 		zs->zsf->fsize = zs->stage_pos;
 		zs->zsf->fsize_compressed = zs->stage_pos;
+
+		zs->zsf->completed = 1;
 	}
 
 	return bytesread;
@@ -260,7 +266,7 @@ int zs_write_filedata(ZS *zs, char *buf, int sbuf) {
 int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf) {
 	int bytesread;
 
-	if(zs->stage_pos == 0 && zs->deflate.init == 0) {
+	if(zs->deflate.init == 0) {
 		zs->deflate.init = 1;
 		zs->deflate.avail_in = 0;
 		zs->deflate.flush = Z_NO_FLUSH;
@@ -270,45 +276,42 @@ int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf) {
 		zs->deflate.strm.opaque = Z_NULL;
 
 		deflateInit2(&zs->deflate.strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY);
-
-		zs->deflate.strm.avail_out = sbuf;
-		zs->deflate.strm.next_out = buf;
 	}
 
 	bytesread = 0;
 
-	while(bytesread != sbuf) {
-		zs->deflate.strm.avail_out = sbuf;
-		zs->deflate.strm.next_out = buf;
+	zs->deflate.strm.avail_out = sbuf;
+	zs->deflate.strm.next_out = buf;
 
+	do {
 		deflate(&zs->deflate.strm, zs->deflate.flush);
 
-		bytesread += sbuf - zs->deflate.strm.avail_out;
+		bytesread = sbuf - zs->deflate.strm.avail_out;
 
-		if(zs->deflate.strm.avail_out != 0) {
+		if(bytesread == 0) {
 			zs->stage_pos += zs->deflate.avail_in;
 
-			if(zs->deflate.flush != Z_FINISH) {
-				zs->deflate.avail_in = fread(zs->deflate.in, 1, 16384, zs->fp);
-
-				zs->zsf->crc32 = crc_partial(zs->zsf->crc32, zs->deflate.in, zs->deflate.avail_in);
-
-				zs->deflate.strm.avail_in = zs->deflate.avail_in;
-				zs->deflate.strm.next_in = zs->deflate.in;
-
-				zs->deflate.flush = feof(zs->fp) ? Z_FINISH : Z_NO_FLUSH;
-			}
-			else {
+			if(zs->deflate.flush == Z_FINISH) {
 				deflateEnd(&zs->deflate.strm);
 
 				zs->zsf->fsize = zs->stage_pos;
+				zs->zsf->completed = 1;
 
-				zs->deflate.init = 1;
+				zs->deflate.init = 0;
 
 				break;
 			}
+
+			zs->deflate.avail_in = fread(zs->deflate.in, 1, sizeof(zs->deflate.in), zs->fp);
+
+			zs->zsf->crc32 = crc_partial(zs->zsf->crc32, zs->deflate.in, zs->deflate.avail_in);
+
+			zs->deflate.strm.avail_in = zs->deflate.avail_in;
+			zs->deflate.strm.next_in = zs->deflate.in;
+
+			zs->deflate.flush = feof(zs->fp) ? Z_FINISH : Z_NO_FLUSH;
 		}
-	}
+	} while(bytesread == 0);
 
 	zs->zsf->fsize_compressed += bytesread;
 
@@ -355,7 +358,7 @@ stager_top:
 
 			switch(zs->zsf->compression) {
 				case ZS_COMPRESS_NONE:
-					zs->write_filedata = zs_write_filedata;
+					zs->write_filedata = zs_write_filedata_none;
 					break;
 				case ZS_COMPRESS_DEFLATE:
 					zs->write_filedata = zs_write_filedata_deflate;
@@ -365,7 +368,7 @@ stager_top:
 	}
 
 	if(zs->stage == LF_DATA) {
-		if(zs->stage_pos == zs->zsf->fsize) {
+		if(zs->zsf->completed == 1) {
 			fprintf(stderr, "%d %d\n", zs->zsf->fsize, zs->zsf->fsize_compressed);
 			zs->stage = LF_DESCRIPTOR;
 			zs->stage_pos = 0;
