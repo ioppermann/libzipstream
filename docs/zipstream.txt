@@ -11,15 +11,19 @@ zs_add_file(zs, "baz.doc", "data/baz.doc");
 zs_add_directory(zs, "foobar");				// version to extract: 2.0
 zs_add_file(zs, "foobar/biz.txt", "data/biz.txt");
 
-zs_finalize(zs);
+zs_finalize(zs);					// get rid of it?
 
 while((bytes = zs_write(zs, buf, sizeof(buf)) > 0)
 	fwrite(buf, 1, bytes, stdout);
 
 zs_free(zs);
 
-/* later
 zlib   http://www.zlib.net/ (deflate)			// method:  8, version to extract: 2.0
 bzip2  http://www.bzip.org/				// method: 12, version to extract: 4.6
+/* later
 lzma   http://www.7-zip.org/				// method: 14, version to extract: 6.3
 */
+
+/* enable this only if an added file is bigger than 0xffffffff bytes */
+ZIP64 Support						// version to extract: 4.5
+-> use extra field in local header (ID = 0x0001)
