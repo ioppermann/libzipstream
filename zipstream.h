@@ -12,8 +12,14 @@
 #define ZS_COMPRESS_DEFLATE		8
 #define ZS_COMPRESS_BZIP2		12
 
-#define ZS_BUFFER_DEFLATE		4096
-#define ZS_BUFFER_BZIP2			4096
+#define ZS_COMPRESS_LEVEL_DEFAULT	0
+#define ZS_COMPRESS_LEVEL_SPEED		1
+#define ZS_COMPRESS_LEVEL_SIZE		9
+
+#define ZS_COMPRESS_BUFFER_DEFLATE	4096
+#define ZS_COMPRESS_BUFFER_BZIP2	4096
+
+#define ZSE_OK				0
 
 typedef struct ZSFile {
 	char *fpath;
@@ -32,6 +38,8 @@ typedef struct ZSFile {
 	size_t offset;
 
 	int compression;
+	int level;
+
 	int version;
 
 	struct ZSFile *prev;
@@ -75,7 +83,8 @@ typedef struct ZS {
 		int init;
 		int avail_in;
 		int flush;
-		char in[ZS_BUFFER_DEFLATE];
+		int level;
+		char in[ZS_COMPRESS_BUFFER_DEFLATE];
 	} deflate;
 
 	struct {
@@ -83,12 +92,13 @@ typedef struct ZS {
 		int init;
 		int avail_in;
 		int flush;
-		char in[ZS_BUFFER_BZIP2];
+		int level;
+		char in[ZS_COMPRESS_BUFFER_BZIP2];
 	} bzip2;
 } ZS;
 
 ZS *zs_init(void);
-int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int compression);
+int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int compression, int level);
 void zs_finalize(ZS *zs);
 int zs_write(ZS *zs, char *buf, int sbuf);
 void zs_free(ZS *zs);

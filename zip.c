@@ -18,9 +18,9 @@ int main(int argc, char **argv) {
 
 	zs = zs_init();
 
-	zs_add_file(zs, "bla/foobar.mp4", "data/foobar.mp4", ZS_COMPRESS_NONE);
-	zs_add_file(zs, "bla/1171032474.mpg", "data/1171032474.mpg", ZS_COMPRESS_BZIP2);
-	zs_add_file(zs, "bla/asnumber.zip", "data/asnumber.zip", ZS_COMPRESS_DEFLATE);
+	zs_add_file(zs, "bla/foobar.mp4", "data/foobar.mp4", ZS_COMPRESS_NONE, ZS_COMPRESS_LEVEL_DEFAULT);
+	zs_add_file(zs, "bla/1171032474.mpg", "data/1171032474.mpg", ZS_COMPRESS_BZIP2, ZS_COMPRESS_LEVEL_SIZE);
+	zs_add_file(zs, "bla/asnumber.zip", "data/asnumber.zip", ZS_COMPRESS_DEFLATE, ZS_COMPRESS_LEVEL_SIZE);
 
 	zs_finalize(zs);
 
@@ -67,7 +67,7 @@ void zs_free(ZS *zs) {
 	return;
 }
 
-int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int compression) {
+int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int compression, int level) {
 	ZSFile *zsf, *pzsf;
 	struct stat sb;
 
@@ -77,10 +77,29 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int comp
 	if(zs->finalized == 1)
 		return -1;
 
+	if(level < ZS_COMPRESS_LEVEL_DEFAULT || level > ZS_COMPRESS_LEVEL_SIZE)
+		level = ZS_COMPRESS_LEVEL_DEFAULT;
+
 	switch(compression) {
 		case ZS_COMPRESS_NONE:
+			break;
 		case ZS_COMPRESS_DEFLATE:
+			if(level == ZS_COMPRESS_LEVEL_SPEED)
+				level = Z_BEST_SPEED;
+			else if(level == ZS_COMPRESS_LEVEL_SIZE)
+				level = Z_BEST_COMPRESSION;
+			else
+				level = Z_DEFAULT_COMPRESSION;
+
+			break;
 		case ZS_COMPRESS_BZIP2:
+			if(level == ZS_COMPRESS_LEVEL_SPEED)
+				level = 1;
+			else if(level == ZS_COMPRESS_LEVEL_SIZE)
+				level = 9;
+			else
+				level = 6;
+
 			break;
 		default:
 			return -1;
@@ -123,9 +142,11 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int comp
 			zsf->version = 10;
 			break;
 		case ZS_COMPRESS_DEFLATE:
+			zsf->level = level;
 			zsf->version = 20;
 			break;
 		case ZS_COMPRESS_BZIP2:
+			zsf->level = level;
 			zsf->version = 46;
 			break;
 	}
@@ -278,7 +299,7 @@ int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf) {
 		zs->deflate.strm.zfree = Z_NULL;
 		zs->deflate.strm.opaque = Z_NULL;
 
-		deflateInit2(&zs->deflate.strm, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY);
+		deflateInit2(&zs->deflate.strm, zs->deflate.level, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY);
 	}
 
 	bytesread = 0;
@@ -333,7 +354,7 @@ int zs_write_filedata_bzip2(ZS *zs, char *buf, int sbuf) {
 		zs->bzip2.strm.bzfree = Z_NULL;
 		zs->bzip2.strm.opaque = Z_NULL;
 
-		BZ2_bzCompressInit(&zs->bzip2.strm, 9, 0, 30);
+		BZ2_bzCompressInit(&zs->bzip2.strm, zs->bzip2.level, 0, 30);
 	}
 
 	bytesread = 0;
@@ -419,9 +440,11 @@ stager_top:
 					zs->write_filedata = zs_write_filedata_none;
 					break;
 				case ZS_COMPRESS_DEFLATE:
+					zs->deflate.level = zs->zsf->level;
 					zs->write_filedata = zs_write_filedata_deflate;
 					break;
 				case ZS_COMPRESS_BZIP2:
+					zs->bzip2.level = zs->zsf->level;
 					zs->write_filedata = zs_write_filedata_bzip2;
 					break;
 			}
