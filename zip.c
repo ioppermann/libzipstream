@@ -22,8 +22,6 @@ int main(int argc, char **argv) {
 	zs_add_file(zs, "bla/1171032474.mpg", "data/1171032474.mpg", ZS_COMPRESS_BZIP2, ZS_COMPRESS_LEVEL_SIZE);
 	zs_add_file(zs, "bla/asnumber.zip", "data/asnumber.zip", ZS_COMPRESS_DEFLATE, ZS_COMPRESS_LEVEL_SIZE);
 
-	zs_finalize(zs);
-
 	while((bytes = zs_read(zs, buf, sizeof(buf))) > 0) {
 		//fprintf(stderr, "%d\n", bytes);
 		fwrite(buf, 1, bytes, stdout);
@@ -168,23 +166,13 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int comp
 	return 0;
 }
 
-void zs_finalize(ZS *zs) {
-	if(zs == NULL)
-		return;
-
-	zs->finalized = 1;
-
-	return;
-}
-
 int zs_read(ZS *zs, char *buf, int sbuf) {
 	int bytes;
 
 	if(zs == NULL)
 		return -1;
 
-	if(zs->finalized == 0)
-		return -1;
+	zs->finalized = 1;
 
 	bytes = 0;
 
