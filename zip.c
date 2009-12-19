@@ -18,7 +18,7 @@
 
 int main(int argc, char **argv) {
 	int bytes;
-	char buf[256];
+	char buf[1024];
 	ZS *zs;
 
 	zs = zs_init();
@@ -194,32 +194,32 @@ int zs_read(ZS *zs, char *buf, int sbuf) {
 			return -1;
 
 		if(zs->stage == FIN)
-			return 0;
+			return bytes;
 
 		switch(zs->stage) {
 			case LF_HEADER:
-				bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_LFH);
+				bytes += zs_write_stagedata(zs, &buf[bytes], sbuf - bytes, ZS_LENGTH_LFH);
 				break;
 			case LF_DESCRIPTOR:
-				bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_LFD);
+				bytes += zs_write_stagedata(zs, &buf[bytes], sbuf - bytes, ZS_LENGTH_LFD);
 				break;
 			case CD_HEADER:
-				bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_CDH);
+				bytes += zs_write_stagedata(zs, &buf[bytes], sbuf - bytes, ZS_LENGTH_CDH);
 				break;
 			case EOCD:
-				bytes = zs_write_stagedata(zs, buf, sbuf, ZS_LENGTH_EOCD);
+				bytes += zs_write_stagedata(zs, &buf[bytes], sbuf - bytes, ZS_LENGTH_EOCD);
 				break;
 			case LF_NAME:
 			case CD_NAME:
-				bytes = zs_write_filename(zs, buf, sbuf);
+				bytes += zs_write_filename(zs, &buf[bytes], sbuf - bytes);
 				break;
 			case LF_DATA:
-				bytes = zs->write_filedata(zs, buf, sbuf);
+				bytes += zs->write_filedata(zs, &buf[bytes], sbuf - bytes);
 				break;
 			default:
 				return -1;
 		}
-	} while(bytes == 0);
+	} while(bytes != sbuf);
 
 	return bytes;
 }
