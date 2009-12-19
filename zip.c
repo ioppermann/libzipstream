@@ -27,10 +27,8 @@ int main(int argc, char **argv) {
 	zs_add_file(zs, "bla/1171032474.mpg", "data/1171032474.mpg", ZS_COMPRESS_BZIP2, ZS_COMPRESS_LEVEL_SIZE);
 	zs_add_file(zs, "bla/asnumber.zip", "data/asnumber.zip", ZS_COMPRESS_DEFLATE, ZS_COMPRESS_LEVEL_SIZE);
 
-	while((bytes = zs_read(zs, buf, sizeof(buf))) > 0) {
-		//fprintf(stderr, "%d\n", bytes);
+	while((bytes = zs_read(zs, buf, sizeof(buf))) > 0)
 		fwrite(buf, 1, bytes, stdout);
-	}
 
 	zs_free(zs);
 
@@ -462,7 +460,6 @@ stager_top:
 
 	if(zs->stage == LF_DATA) {
 		if(zs->zsf->completed == 1) {
-			fprintf(stderr, "%d %d\n", zs->zsf->fsize, zs->zsf->fsize_compressed);
 			zs->stage = LF_DESCRIPTOR;
 			zs->stage_pos = 0;
 
