@@ -100,7 +100,7 @@ typedef struct ZS {
 ZS *zs_init(void);
 int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int compression, int level);
 void zs_finalize(ZS *zs);
-int zs_write(ZS *zs, char *buf, int sbuf);
+int zs_read(ZS *zs, char *buf, int sbuf);
 void zs_free(ZS *zs);
 
 #endif

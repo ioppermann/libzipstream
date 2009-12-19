@@ -24,7 +24,7 @@ int main(int argc, char **argv) {
 
 	zs_finalize(zs);
 
-	while((bytes = zs_write(zs, buf, sizeof(buf))) > 0) {
+	while((bytes = zs_read(zs, buf, sizeof(buf))) > 0) {
 		//fprintf(stderr, "%d\n", bytes);
 		fwrite(buf, 1, bytes, stdout);
 	}
@@ -177,7 +177,7 @@ void zs_finalize(ZS *zs) {
 	return;
 }
 
-int zs_write(ZS *zs, char *buf, int sbuf) {
+int zs_read(ZS *zs, char *buf, int sbuf) {
 	int bytes;
 
 	if(zs == NULL)
