@@ -2,10 +2,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <zlib.h>
-#include <bzlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+
+#ifdef WITH_DEFLATE
+	#include <zlib.h>
+#endif
+#ifdef WITH_BZIP2
+	#include <bzlib.h>
+#endif
 
 #include "zipstream.h"
 #include "zip.h"
@@ -81,6 +86,7 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int comp
 	switch(compression) {
 		case ZS_COMPRESS_NONE:
 			break;
+#ifdef WITH_DEFLATE
 		case ZS_COMPRESS_DEFLATE:
 			if(level == ZS_COMPRESS_LEVEL_SPEED)
 				level = Z_BEST_SPEED;
@@ -90,6 +96,8 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int comp
 				level = Z_DEFAULT_COMPRESSION;
 
 			break;
+#endif
+#ifdef WITH_BZIP2
 		case ZS_COMPRESS_BZIP2:
 			if(level == ZS_COMPRESS_LEVEL_SPEED)
 				level = 1;
@@ -99,6 +107,7 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int comp
 				level = 6;
 
 			break;
+#endif
 		default:
 			return -1;
 	}
@@ -139,14 +148,18 @@ int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int comp
 		case ZS_COMPRESS_NONE:
 			zsf->version = 10;
 			break;
+#ifdef WITH_DEFLATE
 		case ZS_COMPRESS_DEFLATE:
 			zsf->level = level;
 			zsf->version = 20;
 			break;
+#endif
+#ifdef WITH_BZIP2
 		case ZS_COMPRESS_BZIP2:
 			zsf->level = level;
 			zsf->version = 46;
 			break;
+#endif
 	}
 
 	if(zs->zsd.nfiles != 0) {
@@ -275,6 +288,7 @@ int zs_write_filedata_none(ZS *zs, char *buf, int sbuf) {
 	return bytesread;
 }
 
+#ifdef WITH_DEFLATE
 int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf) {
 	int bytesread;
 
@@ -329,7 +343,9 @@ int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf) {
 
 	return bytesread;
 }
+#endif
 
+#ifdef WITH_BZIP2
 int zs_write_filedata_bzip2(ZS *zs, char *buf, int sbuf) {
 	int bytesread;
 
@@ -384,6 +400,7 @@ int zs_write_filedata_bzip2(ZS *zs, char *buf, int sbuf) {
 
 	return bytesread;
 }
+#endif
 
 void zs_stager(ZS *zs) {
 	if(zs->stage == NONE) {
@@ -427,14 +444,18 @@ stager_top:
 				case ZS_COMPRESS_NONE:
 					zs->write_filedata = zs_write_filedata_none;
 					break;
+#ifdef WITH_DEFLATE
 				case ZS_COMPRESS_DEFLATE:
 					zs->deflate.level = zs->zsf->level;
 					zs->write_filedata = zs_write_filedata_deflate;
 					break;
+#endif
+#ifdef WITH_BZIP2
 				case ZS_COMPRESS_BZIP2:
 					zs->bzip2.level = zs->zsf->level;
 					zs->write_filedata = zs_write_filedata_bzip2;
 					break;
+#endif
 			}
 		}
 	}

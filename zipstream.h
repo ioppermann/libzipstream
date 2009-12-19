@@ -3,14 +3,25 @@
 
 #include <stdio.h>
 #include <time.h>
-#include <zlib.h>
-#include <bzlib.h>
+
+#ifdef WITH_DEFLATE
+	#include <zlib.h>
+#endif
+#ifdef WITH_BZIP2
+	#include <bzlib.h>
+#endif
 
 #define ZS_STAGE_LENGTH_MAX		46
 
 #define ZS_COMPRESS_NONE		0
+
+#ifdef WITH_DEFLATE
 #define ZS_COMPRESS_DEFLATE		8
+#endif
+
+#ifdef WITH_BZIP2
 #define ZS_COMPRESS_BZIP2		12
+#endif
 
 #define ZS_COMPRESS_LEVEL_DEFAULT	0
 #define ZS_COMPRESS_LEVEL_SPEED		1
@@ -78,6 +89,7 @@ typedef struct ZS {
 	// File data writer
 	int (*write_filedata)(struct ZS *, char *, int);
 
+#ifdef WITH_DEFLATE
 	struct {
 		z_stream strm;
 		int init;
@@ -86,7 +98,9 @@ typedef struct ZS {
 		int level;
 		char in[ZS_COMPRESS_BUFFER_DEFLATE];
 	} deflate;
+#endif
 
+#ifdef WITH_BZIP2
 	struct {
 		bz_stream strm;
 		int init;
@@ -95,6 +109,7 @@ typedef struct ZS {
 		int level;
 		char in[ZS_COMPRESS_BUFFER_BZIP2];
 	} bzip2;
+#endif
 } ZS;
 
 ZS *zs_init(void);

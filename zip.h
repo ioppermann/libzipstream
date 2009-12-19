@@ -17,8 +17,12 @@ int zs_write_stagedata(ZS *zs, char *buf, int sbuf, int size);
 int zs_write_filename(ZS *zs, char *buf, int sbuf);
 
 int zs_write_filedata_none(ZS *zs, char *buf, int sbuf);
+#ifdef WITH_DEFLATE
 int zs_write_filedata_deflate(ZS *zs, char *buf, int sbuf);
+#endif
+#ifdef WITH_BZIP2
 int zs_write_filedata_bzip2(ZS *zs, char *buf, int sbuf);
+#endif
 
 size_t zs_get_cdoffset(ZS *zs);
 size_t zs_get_cdsize(ZS *zs);
