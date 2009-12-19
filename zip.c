@@ -41,8 +41,6 @@ ZS *zs_init(void) {
 	if(zs == NULL)
 		return NULL;
 
-	crc_init();
-
 	return zs;
 }
 
