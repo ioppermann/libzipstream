@@ -112,7 +112,7 @@ typedef struct ZS {
 #endif
 } ZS;
 
-ZS *zs_init(void);
+void zs_init(ZS *zs);
 int zs_add_file(ZS *zs, const char *targetpath, const char *sourcepath, int compression, int level);
 int zs_read(ZS *zs, char *buf, int sbuf);
 void zs_free(ZS *zs);
